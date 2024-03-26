@@ -1,0 +1,34 @@
+task: 'egg'
+
+
+dataset:
+  data_dir: ./data/
+  train: ./train.csv
+  val: ./val.csv
+  test: ./test.csv
+  num_classes: 6
+  signal_length: 1000
+
+train:
+  save_path: "./models/"
+  seed: -1
+  batch_size: 8
+  lr: 0.000004
+  accelerator: "cpu"
+  devices: 1
+  max_epochs: 100
+
+generate_map: "None"
+
+checkpoint:
+  version: 0
+
+log:  
+  path: "./logs/"
+  wandb: True
+
+wandb:
+  wandb:
+  entity: MarcoParola
+  project: HMS-kaggle
+  tag: ""

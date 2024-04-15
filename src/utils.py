@@ -1,16 +1,12 @@
-import os
-import torchvision
-import numpy as np
-import pandas as pd
-import seaborn as sn
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
-from sklearn.utils.multiclass import unique_labels
-from torchvision.transforms.v2 import AutoAugmentPolicy, functional as F, InterpolationMode, Transform
-import wandb
-from omegaconf import DictConfig, OmegaConf
 import flatdict
+import torchvision
+import wandb
+from omegaconf import OmegaConf
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from torcheeg import transforms
+import torcheeg.transforms as transforms
+import torchvision.transforms as tv_transforms
+
 
 def get_early_stopping(cfg):
     """Returns an EarlyStopping callback
@@ -28,12 +24,20 @@ def get_transformations(cfg):
     """Returns the transformations for the dataset
     cfg: hydra config
     """
-    tranform = torchvision.transforms.Compose([
-        # TODO metti altre transform qui
-        torchvision.transforms.ToTensor(),
+    transform = torchvision.transforms.Compose([
+        transforms.BaselineRemoval(),  # Rimuovi il segnale di base
+        transforms.CWTSpectrum(),  # Converti il segnale in spettrogrammi con trasformata wavelet
+        transforms.BandSignal(),  # Dividi il segnale in segnali nelle diverse bande di frequenza
+        transforms.PearsonCorrelation(),  # Calcola i coefficienti di correlazione tra i segnali di diversi elettrodi
+        transforms.PhaseLockingCorrelation(),  # Calcola i valori di blocco di fase tra i segnali di diversi elettrodi
+        transforms.BandPowerSpectralDensity(),  # Calcola la densità spettrale di potenza del segnale nelle diverse
+                                                # bande di frequenza
+        transforms.MeanStdNormalize(),  # Normalizza il segnale con z-score
+        transforms.RandomNoise(),  # Aggiungi rumore casuale al segnale
     ])
 
-    return tranform
+    return transform
+
 
 
 

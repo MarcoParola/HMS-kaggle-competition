@@ -14,19 +14,19 @@ from torch import nn
 class HMSClassifierModule(LightningModule):
 
     def __init__(self, signal_len, num_classes, lr=1e-5, max_epochs=100):
+
         super().__init__()
         self.save_hyperparameters()
-        self.signal_len = signal_len
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
-        self.conv5 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv1d(in_channels=20, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.conv5 = nn.Conv1d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-        # TODO controlla la dimensionalità dell'input_size, non ho guardato come sono fatti i dati
-        self.fc_input_size = 256 * (signal_len // 32) # TODO random staff.. check ho to compute the len at this stage
+        self.fc_input_size = 512 * (signal_len // 32)   # 512 out_channels of 5th conv layer and 32 because signal len is reducted after 5 max pooling (2^5 = 32)
         self.fc1 = nn.Linear(self.fc_input_size, 128)
         self.fc2 = nn.Linear(128, num_classes)
+
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
         self.loss = torch.nn.CrossEntropyLoss()
@@ -34,12 +34,22 @@ class HMSClassifierModule(LightningModule):
         self.total_predictions = None
         self.classes = [i for i in range(num_classes)]
 
+
     def preprocess(self, x):
+        # see MNE lib
+
+        # drop EKG
+
+        # normalize label votes
+        # labels = df[vote_cols].values
+        # labels = torch.from_numpy(labels).double()
+        # labels = labels / labels.sum(dim=1, keepdim=True) # Normalize vote ratios
+
+        # see Hz characteristics
+
         return x
 
     def forward(self, x):
-        x = x.unsqueeze(1)
-        
         x = self.relu(self.conv1(x))
         x = self.pool(x)
         x = self.relu(self.conv2(x))
@@ -50,14 +60,14 @@ class HMSClassifierModule(LightningModule):
         x = self.pool(x)
         x = self.relu(self.conv5(x))
         x = self.pool(x)
-        
+
         x = x.view(-1, self.fc_input_size)
-        
+
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
-        
+
         x = self.softmax(x)
-        
+
         return x
 
     def training_step(self, batch, batch_idx):
@@ -68,8 +78,8 @@ class HMSClassifierModule(LightningModule):
 
     def test_step(self, batch, batch_idx):
         self.eval()
-        imgs, labels = batch
-        x = self.preprocess(imgs)
+        eegs, labels = batch
+        x = self.preprocess(eegs)
         y_hat = self(x)
         predictions = torch.argmax(y_hat, dim=1)
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=True, on_epoch=True, logger=True)
@@ -79,8 +89,8 @@ class HMSClassifierModule(LightningModule):
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
-        img, label = batch
-        x = self.preprocess(img)
+        eeg, label = batch
+        x = self.preprocess(eeg)
         return self(x)
 
     def configure_optimizers(self):
@@ -102,5 +112,3 @@ class HMSClassifierModule(LightningModule):
         self.log(f"{stage}_loss", loss, on_step=True, on_epoch=True)
 
         return loss
-
-    

@@ -1,6 +1,7 @@
 import hydra
 import torch
 import pytorch_lightning as pl
+import os
 from sklearn.metrics import classification_report
 import numpy as np
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -24,7 +25,6 @@ def main(cfg):
     loggers = get_loggers(cfg)
 
     transformations = get_transformations(cfg)
-    transformations = None # TODO non so bene che trasformazione mettere
 
     model = HMSClassifierModule(
         signal_len=cfg.dataset.signal_length,
@@ -51,8 +51,7 @@ def main(cfg):
     trainer.fit(model, data)
 
     # test step
-    predict(trainer, model, data, cfg.generate_map, cfg.task, cfg.classification_mode)
-
+    trainer.test(model, data.predict_dataloader())
 
 
 

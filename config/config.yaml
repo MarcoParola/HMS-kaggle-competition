@@ -1,20 +1,24 @@
-task: 'egg'
+task: 'spectr'
 
 
 dataset:
   data_dir: ./dataset/
-  train: ./train.csv
-  val: ./val.csv
-  test: ./test.csv
+  #train: ./train_eegs.csv
+  #val: ./val_eegs.csv
+  #test: ./test_eegs.csv
+  train: ./train_spectr.csv
+  val: ./val_spectr.csv
+  test: ./test_spectr.csv
   num_classes: 6
   signal_length: 2000
+  img_size: 512
 
 train:
   save_path: "./models/"
   seed: -1
-  batch_size: 8
+  batch_size: 32
   lr: 0.000004
-  accelerator: "cpu"
+  accelerator: "gpu"
   devices: 1
   max_epochs: 100
 

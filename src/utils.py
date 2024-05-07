@@ -1,11 +1,17 @@
 import flatdict
 import torchvision
-import wandb
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from torcheeg import transforms
-import torcheeg.transforms as transforms
-import torchvision.transforms as tv_transforms
+
+import numpy as np
+import pandas as pd
+import pywt
+
+import torch
+
+import wandb
+import torchvision.transforms as transforms
+import torcheeg.transforms as tet
 
 
 def get_early_stopping(cfg):
@@ -20,25 +26,17 @@ def get_early_stopping(cfg):
     return early_stopping_callback
 
 
+
 def get_transformations(cfg):
-    """Returns the transformations for the dataset
-    cfg: hydra config
-    """
-    transform = torchvision.transforms.Compose([
-        transforms.BaselineRemoval(),  # Rimuovi il segnale di base
-        transforms.CWTSpectrum(),  # Converti il segnale in spettrogrammi con trasformata wavelet
-        transforms.BandSignal(),  # Dividi il segnale in segnali nelle diverse bande di frequenza
-        transforms.PearsonCorrelation(),  # Calcola i coefficienti di correlazione tra i segnali di diversi elettrodi
-        transforms.PhaseLockingCorrelation(),  # Calcola i valori di blocco di fase tra i segnali di diversi elettrodi
-        transforms.BandPowerSpectralDensity(),  # Calcola la densità spettrale di potenza del segnale nelle diverse
-                                                # bande di frequenza
-        transforms.MeanStdNormalize(),  # Normalizza il segnale con z-score
-        transforms.RandomNoise(),  # Aggiungi rumore casuale al segnale
+
+    transform = transforms.Compose([
+        # tet.BandDifferentialEntropy(),
+        # tet.BaselineRemoval(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cfg.dataset.mean, std=cfg.dataset.std),
     ])
 
     return transform
-
-
 
 
 def log_confusion_matrix_wandb(list_loggers, logger, y_true, preds, class_names):
@@ -46,12 +44,14 @@ def log_confusion_matrix_wandb(list_loggers, logger, y_true, preds, class_names)
     if 'wandb' in list_loggers:
         # logging confusion matrix on wandb
         logger.log({"conf_mat": wandb.plot.confusion_matrix(probs=None, y_true=y_true,
-                                                                            preds=preds,
-                                                                            class_names=class_names)})
+                                                            preds=preds,
+                                                            class_names=class_names)})
+
 
 def hp_from_cfg(cfg):
     cfg = OmegaConf.to_container(cfg, resolve=True)
     return dict(flatdict.FlatDict(cfg, delimiter="/"))
+
 
 def get_loggers(cfg):
     """Returns a list of loggers
@@ -69,4 +69,38 @@ def get_loggers(cfg):
 
     return loggers
 
+def denoise(x, wavelet='db8', level=1):
+    def _maddest(d, axis=None):
+        return np.mean(np.absolute(d - np.mean(d, axis)), axis)
+    ret = {key:[] for key in x.columns}
+    for pos in x.columns:
+        coeff = pywt.wavedec(x[pos], wavelet, mode="per")
+        sigma = (1/0.6745) * _maddest(coeff[-level])
+        uthresh = sigma * np.sqrt(2*np.log(len(x)))
+        coeff[1:] = (pywt.threshold(i, value=uthresh, mode='hard') for i in coeff[1:])
+        ret[pos]=pywt.waverec(coeff, wavelet, mode='per')
+    return pd.DataFrame(ret)
+
+def interpolate(raw_df):
+    df = raw_df.copy()
+    df = df.interpolate(
+        method='linear',
+        axis=0,
+        limit=1, # ref to 1 value
+        limit_direction="both", # interpolate from pre and post values
+        limit_area='inside',
+    )
+    return df
+
+def replace_outlier(series, bias=1.5, upper=0.95, lower=0.05):
+    lower_clip = series.quantile(lower)
+    upper_clip = series.quantile(upper)
+    iqr = upper_clip - lower_clip
+
+    outlier_min = lower_clip - (iqr) * bias
+    outlier_max = upper_clip + (iqr) * bias
+
+    series = series.clip(outlier_min, outlier_max)
+    series = series.fillna(series.median())  # Replace NaN values with median
+    return series
 

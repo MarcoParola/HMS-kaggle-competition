@@ -1,9 +1,9 @@
 dataset/
+data/
 wandb/
 lighning_logs/
 outputs/
 src/data/outputs/
-
 
 
 workspace.xml

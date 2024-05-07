@@ -1,7 +1,7 @@
 dataset/
 data/
 wandb/
-lighning_logs/
+lightning_logs/
 outputs/
 src/data/outputs/
 

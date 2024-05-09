@@ -1,5 +1,7 @@
 dataset/
 data/
+small_eegs/
+small_spectr/
 wandb/
 lightning_logs/
 outputs/

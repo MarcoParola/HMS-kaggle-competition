@@ -23,7 +23,7 @@ def main(cfg):
 
     transformations = get_transformations(cfg)
 
-    if cfg.task == 'eeg':
+    if cfg.task == 'eegs':
         model = HMSEEGClassifierModule(
             signal_len=cfg.dataset.signal_length,
             num_classes=cfg.dataset.num_classes,
@@ -37,12 +37,11 @@ def main(cfg):
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
         )
-    
 
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
         batch_size=cfg.train.batch_size,
-        mode = cfg.task,
+        mode=cfg.task,
         transform=transformations,
     )
 
@@ -58,7 +57,7 @@ def main(cfg):
     )
 
     trainer.fit(model, data)
-    
+
     # test step
     trainer.test(model, data.test_dataloader())
 

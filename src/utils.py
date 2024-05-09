@@ -1,6 +1,7 @@
 import flatdict
 import torchvision
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 import numpy as np
@@ -11,8 +12,23 @@ import torch
 
 import wandb
 import torchvision.transforms as transforms
-import torcheeg.transforms as tet
+#import torcheeg.transforms as tet
 
+
+def get_checkpoint(cfg):
+    """Returns an ModelCheckpoint callback
+    cfg: hydra config
+    """
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss',
+                                          dirpath='checkpoint',
+                                          save_last = True,
+                                        )
+    return checkpoint_callback
+
+def get_lr_monitor(cfg):
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+
+    return lr_monitor
 
 def get_early_stopping(cfg):
     """Returns an EarlyStopping callback
@@ -33,7 +49,8 @@ def get_transformations(cfg):
         # tet.BandDifferentialEntropy(),
         # tet.BaselineRemoval(),
         transforms.ToTensor(),
-        transforms.Normalize(mean=cfg.dataset.mean, std=cfg.dataset.std),
+        transforms.Resize((512, 512)),
+        #transforms.Normalize(mean=cfg.dataset.mean, std=cfg.dataset.std),
     ])
 
     return transform

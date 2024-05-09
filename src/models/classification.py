@@ -3,7 +3,6 @@ from pytorch_lightning import LightningModule
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score, precision_score, f1_score
 from torch import nn
-import hydra
 
 
 class HMSEEGClassifierModule(LightningModule):
@@ -78,7 +77,7 @@ class HMSEEGClassifierModule(LightningModule):
         eegs, labels = batch
         x = self.preprocess(eegs)
         y_hat = self(x)
-        predictions = torch.argmax(y_hat, dim=1)
+        predictions = torch.argmax(y_hat, dim=1).detach().numpy()
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
         self.log('recall', recall_score(labels, predictions, average='micro'), on_step=False, on_epoch=True, logger=True)
         self.log('precision', precision_score(labels, predictions, average='micro'), on_step=False, on_epoch=True,
@@ -93,6 +92,14 @@ class HMSEEGClassifierModule(LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.max_epochs, eta_min=1e-5)
+        # lr_scheduler_config = {
+        #     "scheduler": scheduler,
+        #     "interval": "step",
+        #     "frequency": 1
+        # }
+        # return [optimizer], [lr_scheduler_config]
+
 
     def _common_step(self, batch, batch_idx, stage):
         signals, labels = batch
@@ -162,7 +169,7 @@ class HMSSpectrClassifierModule(LightningModule):
         images, labels = batch
         x = self.preprocess(images)
         y_hat = self(x)
-        predictions = torch.argmax(y_hat, dim=1)
+        predictions = torch.argmax(y_hat, dim=1).detach().numpy()
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
         self.log('recall', recall_score(labels, predictions, average='micro'), on_step=False, on_epoch=True, logger=True)
         self.log('precision', precision_score(labels, predictions, average='micro'), on_step=False, on_epoch=True,
@@ -177,6 +184,13 @@ class HMSSpectrClassifierModule(LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.max_epochs, eta_min=1e-5)
+        # lr_scheduler_config = {
+        #     "scheduler": scheduler,
+        #     "interval": "step",
+        #     "frequency": 1
+        # }
+        # return [optimizer], [lr_scheduler_config]
 
     def _common_step(self, batch, batch_idx, stage):
         images, labels = batch
@@ -184,6 +198,6 @@ class HMSSpectrClassifierModule(LightningModule):
 
         pred = self(images)
         loss = self.loss(pred, labels)
-        self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True)
+        self.log(f"{stage}_loss", loss, on_step=True, on_epoch=True)
 
         return loss

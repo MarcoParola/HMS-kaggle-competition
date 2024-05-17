@@ -1,3 +1,4 @@
+# Distribution / packaging
 dataset/
 data/
 small_eegs/
@@ -7,15 +8,27 @@ lightning_logs/
 outputs/
 src/data/outputs/
 
-
-workspace.xml
-usage.statistics.xml
-shelf/
-.ipynb_checkpoints
-build/
+.Python
 MANIFEST
+build/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
 
+# JetBrains
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
 .env
 .venv
 env/

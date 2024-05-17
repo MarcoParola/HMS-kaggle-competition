@@ -1,28 +1,23 @@
-task: 'spectr'
-#task: 'eegs'
+#task: 'spectr'
+task: 'eegs'          # eegs | spectr | eegs-spectr
 
 dataset:
-#  data_dir: ./dataset/
+  data_dir: ./dataset/
 #  data_dir: ./small_eegs/
-  data_dir: ./small_spectr/
-#  train: ./train_eegs.csv
-#  val: ./val_eegs.csv
-#  test: ./test_eegs.csv
-  train: ./train_spectr.csv
-  val: ./val_spectr.csv
-  test: ./test_spectr.csv
+#  data_dir: ./small_spectr/
   num_classes: 6
   signal_length: 2000
   img_size: 512
 
 train:
-  save_path: "./models/"
+  save_path: "./checkpoint/"
   seed: -1
   batch_size: 32
   lr: 0.000004
   accelerator: "gpu"
   devices: 1
-  max_epochs: 100
+  max_epochs: 3
+  freeze: "yes"         # yes | no
 
 checkpoint:
   version: 0
@@ -32,7 +27,6 @@ log:
   wandb: True
 
 wandb:
-  # entity: MarcoParola
   entity: martina-marino1996
   project: HMS-kaggle
   tag: ""

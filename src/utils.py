@@ -20,8 +20,8 @@ def get_checkpoint(cfg):
     cfg: hydra config
     """
     checkpoint_callback = ModelCheckpoint(monitor='val_loss',
-                                          dirpath='checkpoint',
-                                          save_last = True,
+                                          dirpath=cfg.train.save_path,
+                                          filename='{cfg.task}-{epoch}-{step}',
                                         )
     return checkpoint_callback
 
@@ -50,7 +50,6 @@ def get_transformations(cfg):
         # tet.BaselineRemoval(),
         transforms.ToTensor(),
         transforms.Resize((512, 512)),
-        #transforms.Normalize(mean=cfg.dataset.mean, std=cfg.dataset.std),
     ])
 
     return transform
@@ -120,4 +119,3 @@ def replace_outlier(series, bias=1.5, upper=0.95, lower=0.05):
     series = series.clip(outlier_min, outlier_max)
     series = series.fillna(series.median())  # Replace NaN values with median
     return series
-

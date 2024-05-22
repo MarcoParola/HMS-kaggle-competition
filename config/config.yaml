@@ -1,5 +1,5 @@
-#task: 'spectr'
-task: 'eegs'          # eegs | spectr | eegs-spectr
+task: 'spectr'
+#task: 'eegs'          # eegs | spectr | eegs-spectr
 
 dataset:
   data_dir: ./dataset/
@@ -16,7 +16,7 @@ train:
   lr: 0.000004
   accelerator: "gpu"
   devices: 1
-  max_epochs: 3
+  max_epochs: 100
   freeze: "yes"         # yes | no
 
 checkpoint:

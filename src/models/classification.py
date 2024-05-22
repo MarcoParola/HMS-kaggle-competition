@@ -75,7 +75,7 @@ class HMSEEGClassifierModule(LightningModule):
         x = x.view(-1, self.fc_input_size)
 
         x = self.relu(self.fc1(x))
-        #print("Features shape", x.shape) -> Features shape torch.Size([32, 128])
+        # print("Features shape", x.shape) # Features shape torch.Size([32, 128])     4.6 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -96,10 +96,13 @@ class HMSEEGClassifierModule(LightningModule):
         predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
         labels = labels.cpu().detach().numpy()
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True, logger=True)
-        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
                  logger=True)
-        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True, logger=True)
+        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
+                 on_epoch=True,
+                 logger=True)
+        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+                 logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         eeg, label = batch
@@ -139,7 +142,7 @@ class HMSSpectrClassifierModule(LightningModule):
         self.conv5 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         self.fc_input_size = 512 * (
-                    img_size // 32) ** 2  # 512 out_channels of 5th conv layer and 32 because signal len is reducted
+                img_size // 32) ** 2  # 512 out_channels of 5th conv layer and 32 because signal len is reducted
         # after 5 max pooling (2^5 = 32)
         self.fc1 = nn.Linear(self.fc_input_size, 128)
         self.fc2 = nn.Linear(128, num_classes)
@@ -183,7 +186,7 @@ class HMSSpectrClassifierModule(LightningModule):
         x = x.view(-1, self.fc_input_size)
 
         x = self.relu(self.fc1(x))
-        print("Features shape", x.shape)
+        # print("Features shape", x.shape) # Features shape torch.Size([32, 128])     18.3 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -204,10 +207,13 @@ class HMSSpectrClassifierModule(LightningModule):
         predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
         labels = labels.cpu().detach().numpy()
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True, logger=True)
-        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
                  logger=True)
-        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True, logger=True)
+        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
+                 on_epoch=True,
+                 logger=True)
+        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+                 logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         images, label = batch
@@ -230,14 +236,14 @@ class HMSSpectrClassifierModule(LightningModule):
 
         pred = self(images)
         loss = self.loss(pred, labels)
-        self.log(f"{stage}_loss", loss, on_step=True, on_epoch=True)
+        self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True)
 
         return loss
 
 
 class HMSEEGSpectrClassifierModule(LightningModule):
 
-    def __init__():
+    def __init__(self, freeze, eeg_ckpt, spectr_ckpt, num_classes):
         super().__init__()
 
         # load eeg model
@@ -250,23 +256,19 @@ class HMSEEGSpectrClassifierModule(LightningModule):
         # load spectr model
         ckpt_name = "{cf.save_path}my_checkpoint_file.ckpt"
         self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(ckpt_name)
-        
+
         if freeze == 'yes':
             self.spectr_model.freeze()
 
-        #self.fc1 = nn.Linear( ??? , 128)
+        self.fc1 = nn.Linear(32, 128)
         self.fc2 = nn.Linear(128, num_classes)
 
         # TODO: Stampa trainable params both with freeze and without freeze
-
-
 
     def forward(self, x):
         eeg, spectr = x
         eeg = self.eeg_model.extract_features(eeg)
         spectr = self.spectr_model.extract_features(spectr)
-
-        
 
         features = torch.cat((eeg, spectr), dim=1)
         out = self.fc1(features)

@@ -55,14 +55,27 @@ class HMSSignalClassificationDataset(torch.utils.data.Dataset):
             return eeg_tensor, label
 
         elif self.mode == 'spectr':
-            eeg_file = os.path.join(self.data_dir, f"{self.stage}_spectr", f"{label_id}.png")
-            image = Image.open(eeg_file).convert('RGB')
+            spectr_file = os.path.join(self.data_dir, f"{self.stage}_spectr", f"{label_id}.png")
+            image = Image.open(spectr_file).convert('RGB')
 
             if self.transform:
                 image = self.transform(image)
 
             return image, label
 
+        elif self.mode == 'eegsspectr':
+            eeg_file = os.path.join(self.data_dir, "eeg_windows", f"{label_id}.csv")
+            eeg = pd.read_csv(eeg_file)
+            eeg_values = eeg.values.astype('float32').T
+            eeg_tensor = torch.tensor(eeg_values)
+
+            spectr_file = os.path.join(self.data_dir, "spectr_windows", f"{label_id}.png")
+            image = Image.open(spectr_file).convert('RGB')
+
+            if self.transform:
+                image = self.transform(image)
+
+            return eeg_tensor, image, label
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")
 def main(cfg):

@@ -243,34 +243,94 @@ class HMSSpectrClassifierModule(LightningModule):
 
 class HMSEEGSpectrClassifierModule(LightningModule):
 
-    def __init__(self, freeze, eeg_ckpt, spectr_ckpt, num_classes):
+    def __init__(self, freeze, eegs_model_path, spectr_model_path, num_classes, lr=1e-5, max_epochs=100):
         super().__init__()
+        self.save_hyperparameters()
 
         # load eeg model
-        ckpt_name = "{cf.save_path}my_checkpoint_file.ckpt"
-        self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(ckpt_name)
+        self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
+
+        # load spectr model
+        self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(spectr_model_path)
 
         if freeze == 'yes':
             self.eeg_model.freeze()
-
-        # load spectr model
-        ckpt_name = "{cf.save_path}my_checkpoint_file.ckpt"
-        self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(ckpt_name)
-
-        if freeze == 'yes':
             self.spectr_model.freeze()
 
-        self.fc1 = nn.Linear(32, 128)
+        self.fc1 = nn.Linear(256, 128)
         self.fc2 = nn.Linear(128, num_classes)
+        self.softmax = nn.Softmax(dim=1)
+        self.loss = nn.CrossEntropyLoss()
 
-        # TODO: Stampa trainable params both with freeze and without freeze
+    def preprocess(self, x):
+        return x
 
     def forward(self, x):
         eeg, spectr = x
-        eeg = self.eeg_model.extract_features(eeg)
-        spectr = self.spectr_model.extract_features(spectr)
 
-        features = torch.cat((eeg, spectr), dim=1)
-        out = self.fc1(features)
+        eeg_features = self.eeg_model.extract_features(eeg)
+        spectr_features = self.spectr_model.extract_features(spectr)
+
+        # Stampa delle dimensioni delle feature estratte
+        # print(f"EEG features shape: {eeg_features.shape}")		(32, 128)
+        # print(f"Spectrogram features shape: {spectr_features.shape}")    (32,128)
+
+        combined_features = torch.cat((eeg_features, spectr_features), dim=1)
+
+        # Stampa delle dimensioni delle feature combinate
+        # print(f"Combined features shape: {combined_features.shape}")    (32,256)
+
+        out = self.fc1(combined_features)
         out = self.fc2(out)
         out = self.softmax(out)
+
+        return out
+
+    def training_step(self, batch, batch_idx):
+        return self._common_step(batch, batch_idx, "train")
+
+    def validation_step(self, batch, batch_idx):
+        self._common_step(batch, batch_idx, "val")
+
+    def test_step(self, batch, batch_idx):
+        self.eval()
+        data, labels = batch
+        x = self.preprocess(data)
+        y_hat = self(x)
+        predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
+        labels = labels.cpu().detach().numpy()
+        self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
+        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+                 logger=True)
+        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
+                 on_epoch=True,
+                 logger=True)
+        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+                 logger=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        data, label = batch
+        x = self.preprocess(data)
+        return self(x)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.max_epochs,
+                                                               eta_min=1e-5)
+        lr_scheduler_config = {
+            "scheduler": scheduler,
+            "interval": "step",
+            "frequency": 1
+        }
+        return [optimizer], [lr_scheduler_config]
+
+    def _common_step(self, batch, batch_idx, stage):
+        eeg, spectr, labels = batch
+        data = (eeg, spectr)
+        data = self.preprocess(data)
+
+        pred = self(data)
+        loss = self.loss(pred, labels)
+        self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True)
+
+        return loss

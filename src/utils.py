@@ -21,7 +21,8 @@ def get_checkpoint(cfg):
     """
     checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                           dirpath=cfg.train.save_path,
-                                          filename='{cfg.task}-{epoch}-{step}',
+                                          filename=cfg.task+'_{epoch}-{step}',
+                                          save_last = False
                                         )
     return checkpoint_callback
 

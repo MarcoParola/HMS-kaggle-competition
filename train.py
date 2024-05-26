@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from src.data.datamodule import HMSSignalClassificationDataModule
 from src.models.classification import HMSEEGClassifierModule, HMSSpectrClassifierModule
+from src.models.classification import HMSEEGSpectrClassifierModule
 from src.utils import *
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
@@ -38,9 +39,11 @@ def main(cfg):
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
         )
-    elif cfg.task == 'eegs-spectr':
+    elif cfg.task == 'eegsspectr':
         model = HMSEEGSpectrClassifierModule(
             freeze=cfg.train.freeze,
+            eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
+            spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs

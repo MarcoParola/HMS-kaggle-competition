@@ -1,5 +1,6 @@
-task: 'spectr'
-#task: 'eegs'          # eegs | spectr | eegs-spectr
+#task: 'spectr'
+#task: 'eegs'          # eegs | spectr | eegsspectr
+task: 'eegsspectr'
 
 dataset:
   data_dir: ./dataset/
@@ -16,15 +17,17 @@ train:
   lr: 0.000004
   accelerator: "gpu"
   devices: 1
-  max_epochs: 100
+  max_epochs: 4
   freeze: "yes"         # yes | no
+  eegs_run_name: "worthy-snowflake-208"
+  spectr_run_name: "unique-frost-211"
 
 checkpoint:
   version: 0
 
-log:  
+log:
   path: "./logs/"
-  wandb: True
+  wandb: False
 
 wandb:
   entity: martina-marino1996

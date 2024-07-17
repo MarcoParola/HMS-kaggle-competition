@@ -3,6 +3,8 @@ from pytorch_lightning import LightningModule
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score, precision_score, f1_score
 from torch import nn
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 
 class HMSEEGClassifierModule(LightningModule):
@@ -243,20 +245,19 @@ class HMSSpectrClassifierModule(LightningModule):
 
 class HMSEEGSpectrClassifierModule(LightningModule):
 
-    def __init__(self, freeze, eegs_model_path, spectr_model_path, num_classes, lr=1e-5, max_epochs=100):
+    def __init__(self, num_classes, eegs_model_path = "", spectr_model_path = "", lr=1e-5, max_epochs=100, feat_comb_mode="concat"):
         super().__init__()
         self.save_hyperparameters()
+        self.freeze = False
 
-        # load eeg model
-        self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
-
-        # load spectr model
-        self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(spectr_model_path)
-
-        if freeze == 'yes':
-            self.eeg_model.freeze()
-            self.spectr_model.freeze()
-
+        if not eegs_model_path == "" and not spectr_model_path == "":
+            # load eeg model
+            self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
+            # load spectr model
+            self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(spectr_model_path)
+            self.freeze = True
+            self.feature_comb_mode = feat_comb_mode
+        
         self.fc1 = nn.Linear(256, 128)
         self.fc2 = nn.Linear(128, num_classes)
         self.softmax = nn.Softmax(dim=1)
@@ -267,23 +268,81 @@ class HMSEEGSpectrClassifierModule(LightningModule):
 
     def forward(self, x):
         eeg, spectr = x
+    
 
-        eeg_features = self.eeg_model.extract_features(eeg)
-        spectr_features = self.spectr_model.extract_features(spectr)
+        if self.freeze:
+            eeg_features = eeg
+            spectr_features = spectr
 
-        # Stampa delle dimensioni delle feature estratte
-        # print(f"EEG features shape: {eeg_features.shape}")		(32, 128)
-        # print(f"Spectrogram features shape: {spectr_features.shape}")    (32,128)
+            print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
+            print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
 
-        combined_features = torch.cat((eeg_features, spectr_features), dim=1)
+            # normalizzazione features            
+            eeg_features_np = eeg_features.detach().cpu().numpy()
+            spectr_features_np = spectr_features.detach().cpu().numpy()
 
-        # Stampa delle dimensioni delle feature combinate
-        # print(f"Combined features shape: {combined_features.shape}")    (32,256)
+            eeg_scaler = StandardScaler()
+            spectr_scaler = StandardScaler()
 
+            eeg_features_normalized = eeg_scaler.fit_transform(eeg_features_np)
+            spectr_features_normalized = spectr_scaler.fit_transform(spectr_features_np)
+
+            eeg_features_normalized = torch.tensor(eeg_features_normalized, device=eeg_features.device)
+            spectr_features_normalized = torch.tensor(spectr_features_normalized, device=spectr_features.device)
+        
+            combined_features = torch.cat((eeg_features_normalized, spectr_features_normalized), dim=1)
+            
+
+        else:   
+            eeg_features = self.eeg_model.extract_features(eeg)
+            spectr_features = self.spectr_model.extract_features(spectr)
+
+            #print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
+            #print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
+
+            # normalizzazione features
+            eeg_features_np = eeg_features.detach().cpu().numpy()
+            spectr_features_np = spectr_features.detach().cpu().numpy()
+
+            eeg_scaler = StandardScaler()
+            spectr_scaler = StandardScaler()
+
+            eeg_features_normalized = eeg_scaler.fit_transform(eeg_features_np)
+            spectr_features_normalized = spectr_scaler.fit_transform(spectr_features_np)
+
+            eeg_features_normalized = torch.tensor(eeg_features_normalized, device=eeg_features.device)
+            spectr_features_normalized = torch.tensor(spectr_features_normalized, device=spectr_features.device)
+
+            # stampe di controllo
+            #eeg_features_df = pd.DataFrame(eeg_features.cpu().detach().numpy())
+            #spectr_features_df = pd.DataFrame(spectr_features.cpu().detach().numpy())
+            #eeg_features_desc = eeg_features_df.describe()
+            #spectr_features_desc = spectr_features_df.describe()
+            #eeg_features_desc.to_csv('scripts/eeg_features_description.csv')
+            #spectr_features_desc.to_csv('scripts/spectr_features_description.csv')
+        
+
+            combined_features = torch.cat((eeg_features_normalized, spectr_features_normalized), dim=1)
+            # switch self.feature_comb_mode
+            if self.feature_comb_mode == 'concat':
+                combined_features = torch.cat((eeg_features, spectr_features), dim=1)
+            elif self.feature_comb_mode == 'sum':
+                combined_features = eeg_features + spectr_features
+            elif self.feature_comb_mode == 'subtract':
+                combined_features = eeg_features - spectr_features
+            elif self.feature_comb_mode == 'mul':
+                combined_features = eeg_features * spectr_features
+            elif self.feature_comb_mode == 'weighted_sum':
+                combined_features = 0.7 * eeg_features + 0.3 * spectr_features
+            else:
+                raise ValueError("Invalid feature combination mode")
+
+            #print(f"Combined features shape: {combined_features.shape}")    (32,256)
+    
         out = self.fc1(combined_features)
         out = self.fc2(out)
         out = self.softmax(out)
-
+    
         return out
 
     def training_step(self, batch, batch_idx):
@@ -294,7 +353,8 @@ class HMSEEGSpectrClassifierModule(LightningModule):
 
     def test_step(self, batch, batch_idx):
         self.eval()
-        data, labels = batch
+        eeg, spectr, labels = batch
+        data = (eeg, spectr)
         x = self.preprocess(data)
         y_hat = self(x)
         predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
@@ -309,7 +369,8 @@ class HMSEEGSpectrClassifierModule(LightningModule):
                  logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
-        data, label = batch
+        eeg, spectr, labels = batch
+        data = (eeg, spectr)
         x = self.preprocess(data)
         return self(x)
 

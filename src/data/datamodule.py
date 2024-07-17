@@ -1,31 +1,38 @@
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
-from src.data.dataset import HMSSignalClassificationDataset
+from src.data.dataset import FeatureDataset, HMSSignalClassificationDataset
 from src.utils import get_transformations
 import hydra
 
 
 class HMSSignalClassificationDataModule(LightningDataModule):
-    def __init__(self, data_dir, mode, batch_size=32, train_transform=None, val_transform=None,
-                 test_transform=None, transform=None):
+    def __init__(self, data_dir, mode, freeze, batch_size=32, transform=None):
         super().__init__()
 
-        self.train_dataset = HMSSignalClassificationDataset("train", data_dir, mode, transform=transform)
-        self.val_dataset = HMSSignalClassificationDataset("val", data_dir, mode, transform=transform)
-        self.test_dataset = HMSSignalClassificationDataset("test", data_dir, mode, transform=transform)
+        if mode=="eegsspectr" and freeze:
+            print("Using FeatureDataset")
+            self.train_dataset = FeatureDataset("train", data_dir, transform)
+            self.val_dataset = FeatureDataset("val", data_dir, transform)
+            self.test_dataset = FeatureDataset("test", data_dir, transform)   
+        else:
+            print("Using HMSSignalClassificationDataset")
+            self.train_dataset = HMSSignalClassificationDataset("train", data_dir, mode, freeze, transform=transform)
+            self.val_dataset = HMSSignalClassificationDataset("val", data_dir, mode, freeze, transform=transform)
+            self.test_dataset = HMSSignalClassificationDataset("test", data_dir, mode, freeze, transform=transform)
         self.batch_size = batch_size
 
+
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=7)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
 
     def predict_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")
@@ -35,7 +42,8 @@ def main(cfg):
     data = HMSSignalClassificationDataModule(
         data_dir="../."+cfg.dataset.data_dir,
         batch_size=cfg.train.batch_size,
-        transform=transformations,
+        freeze=True,
+        transform=transformations
     )
 
     train_dataloader = DataLoader(data.train_dataset, batch_size=8)

@@ -13,6 +13,10 @@ from src.utils import *
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
 def main(cfg):
+
+    import torch
+    print(torch.cuda.is_available())
+
     if cfg.train.seed == -1:
         random_data = os.urandom(4)
         seed = int.from_bytes(random_data, byteorder="big")
@@ -23,7 +27,6 @@ def main(cfg):
     callbacks.extend([get_early_stopping(cfg), get_checkpoint(cfg)])
     loggers = get_loggers(cfg)
 
-    transformations = get_transformations(cfg)
 
     if cfg.task == 'eegs':
         model = HMSEEGClassifierModule(
@@ -39,21 +42,31 @@ def main(cfg):
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
         )
-    elif cfg.task == 'eegsspectr':
+
+    elif cfg.task == 'eegsspectr' and cfg.train.freeze:
         model = HMSEEGSpectrClassifierModule(
-            freeze=cfg.train.freeze,
-            eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
-            spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
         )
+        
+    elif cfg.task == 'eegsspectr' and not cfg.train.freeze:
+        model = HMSEEGSpectrClassifierModule(
+            eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
+            spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
+            num_classes=cfg.dataset.num_classes,
+            lr=cfg.train.lr,
+            max_epochs=cfg.train.max_epochs,
+            feat_comb_mode=cfg.train.feat_comb_mode
+        )
 
+    transformations = get_transformations(cfg)
 
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
         batch_size=cfg.train.batch_size,
         mode=cfg.task,
+        freeze=cfg.train.freeze,
         transform=transformations,
     )
 

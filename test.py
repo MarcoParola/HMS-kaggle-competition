@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from src.data.datamodule import HMSSignalClassificationDataModule
-from src.models.classification import HMSEEGClassifierModule, HMSSpectrClassifierModule
+from src.models.classification import HMSEEGClassifierModule, HMSEEGSpectrClassifierModule, HMSSpectrClassifierModule
 from src.utils import *
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
@@ -40,6 +40,7 @@ def main(cfg):
         data_dir=cfg.dataset.data_dir,
         batch_size=cfg.train.batch_size,
         mode=cfg.task,
+        freeze=cfg.train.freeze,
         transform=transformations,
     )
 

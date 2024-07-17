@@ -10,9 +10,9 @@ import pywt
 
 import torch
 
-import wandb
+# import wandb
 import torchvision.transforms as transforms
-#import torcheeg.transforms as tet
+from scipy.signal import butter, filtfilt
 
 
 def get_checkpoint(cfg):
@@ -44,17 +44,46 @@ def get_early_stopping(cfg):
 
 
 
-def get_transformations(cfg):
 
-    transform = transforms.Compose([
-        # tet.BandDifferentialEntropy(),
-        # tet.BaselineRemoval(),
-        transforms.ToTensor(),
-        transforms.Resize((512, 512)),
+
+class NormalizeEEG:
+    def __init__(self, cfg):
+        print("USing signal normalization")
+
+        #leggi i valori train mean e std da file, secondo valore di ogni riga
+        stats= pd.read_csv(cfg.dataset.eeg_stats)
+        train_mean = stats['Mean'].to_numpy(dtype=float)
+        train_std = stats['Std'].to_numpy(dtype=float)
+
+        #converti in numpy array
+        self.train_mean = np.array(train_mean)
+        self.train_std = np.array(train_std)
+
+        # print("Train mean: ", self.train_mean)
+        # print("Train std: ", self.train_std)
+
+
+    def __call__(self, df):
+        # print("df: ", df.describe())
+        normalized_df = (df - self.train_mean) / (self.train_std)
+        # print("Normalized df: ", normalized_df.describe())
+
+        return torch.tensor(normalized_df.values.T, dtype=torch.float32)
+        
+
+
+def get_transformations(cfg):
+    
+    eegs_transform = transforms.Compose([
+        NormalizeEEG(cfg)
     ])
 
-    return transform
+    spectr_transforms = transforms.Compose([
+        transforms.Resize((512, 512)),         
+        transforms.ToTensor(),                 
+    ])
 
+    return eegs_transform, spectr_transforms
 
 def log_confusion_matrix_wandb(list_loggers, logger, y_true, preds, class_names):
     # check if wandb is in the list of loggers
@@ -86,37 +115,58 @@ def get_loggers(cfg):
 
     return loggers
 
-def denoise(x, wavelet='db8', level=1):
-    def _maddest(d, axis=None):
-        return np.mean(np.absolute(d - np.mean(d, axis)), axis)
-    ret = {key:[] for key in x.columns}
-    for pos in x.columns:
-        coeff = pywt.wavedec(x[pos], wavelet, mode="per")
-        sigma = (1/0.6745) * _maddest(coeff[-level])
-        uthresh = sigma * np.sqrt(2*np.log(len(x)))
-        coeff[1:] = (pywt.threshold(i, value=uthresh, mode='hard') for i in coeff[1:])
-        ret[pos]=pywt.waverec(coeff, wavelet, mode='per')
-    return pd.DataFrame(ret)
 
-def interpolate(raw_df):
-    df = raw_df.copy()
-    df = df.interpolate(
-        method='linear',
-        axis=0,
-        limit=1, # ref to 1 value
-        limit_direction="both", # interpolate from pre and post values
-        limit_area='inside',
-    )
-    return df
+# Funzione per creare il filtro passabanda
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
 
-def replace_outlier(series, bias=1.5, upper=0.95, lower=0.05):
-    lower_clip = series.quantile(lower)
-    upper_clip = series.quantile(upper)
-    iqr = upper_clip - lower_clip
+# Funzione per applicare il filtro passabanda
+def apply_bandpass_filter(data, lowcut=0.5, highcut=20.0, fs=200.0, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = filtfilt(b, a, data, axis=0)
+    return y
 
-    outlier_min = lower_clip - (iqr) * bias
-    outlier_max = upper_clip + (iqr) * bias
 
-    series = series.clip(outlier_min, outlier_max)
-    series = series.fillna(series.median())  # Replace NaN values with median
-    return series
+
+
+
+
+
+# def denoise(x, wavelet='db8', level=1):
+#     def _maddest(d, axis=None):
+#         return np.mean(np.absolute(d - np.mean(d, axis)), axis)
+#     ret = {key:[] for key in x.columns}
+#     for pos in x.columns:
+#         coeff = pywt.wavedec(x[pos], wavelet, mode="per")
+#         sigma = (1/0.6745) * _maddest(coeff[-level])
+#         uthresh = sigma * np.sqrt(2*np.log(len(x)))
+#         coeff[1:] = (pywt.threshold(i, value=uthresh, mode='hard') for i in coeff[1:])
+#         ret[pos]=pywt.waverec(coeff, wavelet, mode='per')
+#     return pd.DataFrame(ret)
+
+# def interpolate(raw_df):
+#     df = raw_df.copy()
+#     df = df.interpolate(
+#         method='linear',
+#         axis=0,
+#         limit=1, # ref to 1 value
+#         limit_direction="both", # interpolate from pre and post values
+#         limit_area='inside',
+#     )
+#     return df
+
+# def replace_outlier(series, bias=1.5, upper=0.95, lower=0.05):
+#     lower_clip = series.quantile(lower)
+#     upper_clip = series.quantile(upper)
+#     iqr = upper_clip - lower_clip
+
+#     outlier_min = lower_clip - (iqr) * bias
+#     outlier_max = upper_clip + (iqr) * bias
+
+#     series = series.clip(outlier_min, outlier_max)
+#     series = series.fillna(series.median())  # Replace NaN values with median
+#     return series

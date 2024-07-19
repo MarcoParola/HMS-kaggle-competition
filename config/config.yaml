@@ -1,7 +1,6 @@
-task: 'eegs'          # eegs | spectr | eegsspectr
+# task: 'eegs'          # eegs | spectr | eegsspectr
 # task: 'spectr'
-# task: 'feat_extr'
-# task: 'eegsspectr'
+task: 'eegsspectr'
 
 dataset:
   data_dir: ./dataset/
@@ -10,6 +9,8 @@ dataset:
   img_size: 512
   # eeg_stats: "./dataset/eeg_windows_stats.csv"
   eeg_stats: "./dataset/filtered_40Hz_eeg_windows_stats.csv"
+  features_eeg_stats: "./dataset/features_eeg_stats.csv"
+  features_spec_stats: "./dataset/features_spec_stats.csv"
 
   # eeg_stats: "./dataset/filtered_40Hz_hq_eeg_windows_stats.csv"
   only_high_quality: False
@@ -33,7 +34,7 @@ checkpoint:
 
 log:
   path: "./logs/"
-  wandb: True
+  wandb: False
 
 wandb:
   entity: martina-marino1996

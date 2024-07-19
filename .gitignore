@@ -7,6 +7,12 @@ wandb/
 lightning_logs/
 outputs/
 src/data/outputs/
+checkpoint/
+dataset_old/
+
+scripts_old
+scripts/*.png 
+scripts/*.txt
 
 .Python
 MANIFEST

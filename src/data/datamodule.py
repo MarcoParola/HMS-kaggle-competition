@@ -1,8 +1,8 @@
+import hydra
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 from src.data.dataset import FeatureDataset, HMSSignalClassificationDataset
 from src.utils import get_transformations
-import hydra
 
 
 class HMSSignalClassificationDataModule(LightningDataModule):
@@ -23,16 +23,15 @@ class HMSSignalClassificationDataModule(LightningDataModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=7)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
-
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
     def predict_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=7)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")

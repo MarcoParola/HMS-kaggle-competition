@@ -1,18 +1,14 @@
+import torch
+import numpy as np
+import pandas as pd
 import flatdict
 import torchvision
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-import numpy as np
-import pandas as pd
-import pywt
-
-import torch
-
-# import wandb
+import wandb
 import torchvision.transforms as transforms
-from scipy.signal import butter, filtfilt
 
 
 def get_checkpoint(cfg):
@@ -38,11 +34,9 @@ def get_early_stopping(cfg):
     early_stopping_callback = EarlyStopping(
         monitor='val_loss',
         mode='min',
-        patience=20,
+        patience=10,
     )
     return early_stopping_callback
-
-
 
 
 
@@ -52,12 +46,12 @@ class NormalizeEEG:
 
         #leggi i valori train mean e std da file, secondo valore di ogni riga
         stats= pd.read_csv(cfg.dataset.eeg_stats)
-        train_mean = stats['Mean'].to_numpy(dtype=float)
-        train_std = stats['Std'].to_numpy(dtype=float)
+        train_mean = stats['Mean']
+        train_std = stats['Std']
 
         #converti in numpy array
-        self.train_mean = np.array(train_mean)
-        self.train_std = np.array(train_std)
+        self.train_mean = torch.tensor(train_mean).to('cuda')
+        self.train_std = torch.tensor(train_std).to('cuda')
 
         # print("Train mean: ", self.train_mean)
         # print("Train std: ", self.train_std)
@@ -71,6 +65,58 @@ class NormalizeEEG:
         return torch.tensor(normalized_df.values.T, dtype=torch.float32)
         
 
+class NormalizeEegFeatures:
+    def __init__(self, cfg):
+        print("Using eeg features normalization")
+
+        #leggi statistiche da file
+        eegs_stats= pd.read_csv(cfg.dataset.features_eeg_stats)
+        
+        # leggi campi Min e Max
+        train_eegs_min = eegs_stats['Min']
+        train_eegs_max = eegs_stats['Max']
+    
+        #converti in tensori
+        self.train_eegs_min = torch.tensor(train_eegs_min).to('cuda')
+        self.train_eegs_max = torch.tensor(train_eegs_max).to('cuda')
+
+    def __call__(self, feature_vec):
+
+        # print("feature_vec device:", feature_vec.device)
+        # print("self.train_eegs_min device:", self.train_eegs_min.device)
+        # print("self.train_eegs_max device:", self.train_eegs_max.device)
+
+        # print("feature_vec: ", feature_vec)
+        normalized_feature_vec = (feature_vec - self.train_eegs_min) / (self.train_eegs_max - self.train_eegs_min)
+        # print("Normalized feature_vec: ", normalized_feature_vec)
+
+        return normalized_feature_vec
+
+class NormalizeSpecFeatures:
+    def __init__(self, cfg):
+        print("Using spec features normalization")
+
+        #leggi statistiche da file
+        specs_stats= pd.read_csv(cfg.dataset.features_spec_stats)
+
+        train_specs_min = specs_stats['Min']
+        train_specs_max = specs_stats['Max']
+
+        #converti in numpy array
+        self.train_specs_min = torch.tensor(train_specs_min).to('cuda')
+        self.train_specs_max = torch.tensor(train_specs_max).to('cuda')
+
+        # print("Train specs min: ", self.train_specs_min)
+        # print("Train specs max: ", self.train_specs_max)
+
+    def __call__(self, feature_vec):
+
+        # print("feature_vec: ", feature_vec)
+        normalized_feature_vec = (feature_vec - self.train_specs_min) / (self.train_specs_max - self.train_specs_min)
+        # print("Normalized feature_vec: ", normalized_feature_vec)
+
+        return normalized_feature_vec
+
 
 def get_transformations(cfg):
     
@@ -78,12 +124,22 @@ def get_transformations(cfg):
         NormalizeEEG(cfg)
     ])
 
-    spectr_transforms = transforms.Compose([
+    spectr_transform = transforms.Compose([
         transforms.Resize((512, 512)),         
         transforms.ToTensor(),                 
     ])
 
-    return eegs_transform, spectr_transforms
+    eeg_features_transform = transforms.Compose([
+        NormalizeEegFeatures(cfg)
+    ])
+
+    spec_features_transform = transforms.Compose([
+        NormalizeSpecFeatures(cfg)
+    ])
+
+    return eegs_transform, spectr_transform, eeg_features_transform, spec_features_transform
+
+
 
 def log_confusion_matrix_wandb(list_loggers, logger, y_true, preds, class_names):
     # check if wandb is in the list of loggers
@@ -115,58 +171,3 @@ def get_loggers(cfg):
 
     return loggers
 
-
-# Funzione per creare il filtro passabanda
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
-
-# Funzione per applicare il filtro passabanda
-def apply_bandpass_filter(data, lowcut=0.5, highcut=20.0, fs=200.0, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = filtfilt(b, a, data, axis=0)
-    return y
-
-
-
-
-
-
-
-# def denoise(x, wavelet='db8', level=1):
-#     def _maddest(d, axis=None):
-#         return np.mean(np.absolute(d - np.mean(d, axis)), axis)
-#     ret = {key:[] for key in x.columns}
-#     for pos in x.columns:
-#         coeff = pywt.wavedec(x[pos], wavelet, mode="per")
-#         sigma = (1/0.6745) * _maddest(coeff[-level])
-#         uthresh = sigma * np.sqrt(2*np.log(len(x)))
-#         coeff[1:] = (pywt.threshold(i, value=uthresh, mode='hard') for i in coeff[1:])
-#         ret[pos]=pywt.waverec(coeff, wavelet, mode='per')
-#     return pd.DataFrame(ret)
-
-# def interpolate(raw_df):
-#     df = raw_df.copy()
-#     df = df.interpolate(
-#         method='linear',
-#         axis=0,
-#         limit=1, # ref to 1 value
-#         limit_direction="both", # interpolate from pre and post values
-#         limit_area='inside',
-#     )
-#     return df
-
-# def replace_outlier(series, bias=1.5, upper=0.95, lower=0.05):
-#     lower_clip = series.quantile(lower)
-#     upper_clip = series.quantile(upper)
-#     iqr = upper_clip - lower_clip
-
-#     outlier_min = lower_clip - (iqr) * bias
-#     outlier_max = upper_clip + (iqr) * bias
-
-#     series = series.clip(outlier_min, outlier_max)
-#     series = series.fillna(series.median())  # Replace NaN values with median
-#     return series

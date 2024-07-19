@@ -1,10 +1,10 @@
 import torch
 from pytorch_lightning import LightningModule
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import recall_score, precision_score, f1_score
+from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 from torch import nn
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+import torchmetrics.classification
 
 
 class HMSEEGClassifierModule(LightningModule):
@@ -77,7 +77,7 @@ class HMSEEGClassifierModule(LightningModule):
         x = x.view(-1, self.fc_input_size)
 
         x = self.relu(self.fc1(x))
-        # print("Features shape", x.shape) # Features shape torch.Size([32, 128])     4.6 M Trainable params
+        print("Features shape", x.shape) # Features shape torch.Size([32, 128])     4.6 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -95,8 +95,7 @@ class HMSEEGClassifierModule(LightningModule):
         eegs, labels = batch
         x = self.preprocess(eegs)
         y_hat = self(x)
-        predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
-        labels = labels.cpu().detach().numpy()
+        predictions = torch.argmax(y_hat, dim=1)
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
         self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
                  logger=True)
@@ -188,7 +187,7 @@ class HMSSpectrClassifierModule(LightningModule):
         x = x.view(-1, self.fc_input_size)
 
         x = self.relu(self.fc1(x))
-        # print("Features shape", x.shape) # Features shape torch.Size([32, 128])     18.3 M Trainable params
+        print("Features shape", x.shape) # Features shape torch.Size([32, 128])     18.3 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -206,8 +205,7 @@ class HMSSpectrClassifierModule(LightningModule):
         images, labels = batch
         x = self.preprocess(images)
         y_hat = self(x)
-        predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
-        labels = labels.cpu().detach().numpy()
+        predictions = torch.argmax(y_hat, dim=1)
         self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
         self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
                  logger=True)
@@ -245,77 +243,83 @@ class HMSSpectrClassifierModule(LightningModule):
 
 class HMSEEGSpectrClassifierModule(LightningModule):
 
-    def __init__(self, num_classes, eegs_model_path = "", spectr_model_path = "", lr=1e-5, max_epochs=100, feat_comb_mode="concat"):
+    def __init__(self, num_classes, eegs_model_path = "", spectr_model_path = "", freeze=True, lr=1e-5, max_epochs=100, feat_comb_mode=None):
         super().__init__()
         self.save_hyperparameters()
         self.freeze = False
 
-        if not eegs_model_path == "" and not spectr_model_path == "":
-            # load eeg model
-            self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
-            # load spectr model
-            self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(spectr_model_path)
-            self.freeze = True
-            self.feature_comb_mode = feat_comb_mode
+        # load eeg model
+        self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
+        # load spectr model
+        self.spectr_model = HMSSpectrClassifierModule.load_from_checkpoint(spectr_model_path)
+
+        self.freeze = freeze
+        self.feature_comb_mode = feat_comb_mode
         
         self.fc1 = nn.Linear(256, 128)
         self.fc2 = nn.Linear(128, num_classes)
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss()
 
+        self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
+        self.recall = torchmetrics.classification.Recall(task="multiclass", average='weighted', num_classes=num_classes)
+        self.precision = torchmetrics.classification.Precision(task="multiclass", average='weighted', num_classes=num_classes)
+        self.f1 = torchmetrics.classification.F1Score(task="multiclass", average='weighted', num_classes=num_classes)
+
+
     def preprocess(self, x):
         return x
 
     def forward(self, x):
         eeg, spectr = x
-    
 
         if self.freeze:
             eeg_features = eeg
             spectr_features = spectr
 
-            print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
-            print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
-
-            # normalizzazione features            
-            eeg_features_np = eeg_features.detach().cpu().numpy()
-            spectr_features_np = spectr_features.detach().cpu().numpy()
-
-            eeg_scaler = StandardScaler()
-            spectr_scaler = StandardScaler()
-
-            eeg_features_normalized = eeg_scaler.fit_transform(eeg_features_np)
-            spectr_features_normalized = spectr_scaler.fit_transform(spectr_features_np)
-
-            eeg_features_normalized = torch.tensor(eeg_features_normalized, device=eeg_features.device)
-            spectr_features_normalized = torch.tensor(spectr_features_normalized, device=spectr_features.device)
+            # print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
+            # print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
         
-            combined_features = torch.cat((eeg_features_normalized, spectr_features_normalized), dim=1)
-            
+            # switch self.feature_comb_mode
+            if self.feature_comb_mode == 'concat':
+                combined_features = torch.cat((eeg_features, spectr_features), dim=1)
+            elif self.feature_comb_mode == 'sum':
+                combined_features = eeg_features + spectr_features
+            elif self.feature_comb_mode == 'subtract':
+                combined_features = eeg_features - spectr_features
+            elif self.feature_comb_mode == 'mul':
+                combined_features = eeg_features * spectr_features
+            elif self.feature_comb_mode == 'weighted_sum':
+                combined_features = 0.7 * eeg_features + 0.3 * spectr_features
+            else:
+                raise ValueError("Invalid feature combination mode")
+
+            combined_features = combined_features.float()
+
+            # print(f"Combined features shape: {combined_features.shape}")    #(32,256)
+            # # print combined features type
+            # print(f"Combined features type: {type(combined_features)}")    #<class 'torch.Tensor'>
+            # # print combined features data type
+            # print(f"Combined features data type: {combined_features.dtype}") 
+
 
         else:   
             eeg_features = self.eeg_model.extract_features(eeg)
             spectr_features = self.spectr_model.extract_features(spectr)
 
-            #print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
-            #print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
+            # print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
+            # print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
 
             # normalizzazione features
-            eeg_features_np = eeg_features.detach().cpu().numpy()
-            spectr_features_np = spectr_features.detach().cpu().numpy()
-
-            eeg_scaler = StandardScaler()
-            spectr_scaler = StandardScaler()
-
-            eeg_features_normalized = eeg_scaler.fit_transform(eeg_features_np)
-            spectr_features_normalized = spectr_scaler.fit_transform(spectr_features_np)
+            eeg_features_np = eeg_features
+            spectr_features_np = spectr_features
 
             eeg_features_normalized = torch.tensor(eeg_features_normalized, device=eeg_features.device)
             spectr_features_normalized = torch.tensor(spectr_features_normalized, device=spectr_features.device)
 
             # stampe di controllo
-            #eeg_features_df = pd.DataFrame(eeg_features.cpu().detach().numpy())
-            #spectr_features_df = pd.DataFrame(spectr_features.cpu().detach().numpy())
+            #eeg_features_df = pd.DataFrame(eeg_features)
+            #spectr_features_df = pd.DataFrame(spectr_features)
             #eeg_features_desc = eeg_features_df.describe()
             #spectr_features_desc = spectr_features_df.describe()
             #eeg_features_desc.to_csv('scripts/eeg_features_description.csv')
@@ -337,8 +341,14 @@ class HMSEEGSpectrClassifierModule(LightningModule):
             else:
                 raise ValueError("Invalid feature combination mode")
 
-            #print(f"Combined features shape: {combined_features.shape}")    (32,256)
-    
+            combined_features = combined_features.float()
+
+            # print(f"Combined features shape: {combined_features.shape}")    (32,256)
+            # # print combined features type
+            # print(f"Combined features type: {type(combined_features)}")    #<class 'torch.Tensor'>
+            # # print combined features data type
+            # print(f"Combined features data type: {combined_features.dtype}")    #torch.float32
+
         out = self.fc1(combined_features)
         out = self.fc2(out)
         out = self.softmax(out)
@@ -353,23 +363,39 @@ class HMSEEGSpectrClassifierModule(LightningModule):
 
     def test_step(self, batch, batch_idx):
         self.eval()
-        eeg, spectr, labels = batch
+        (eeg, spectr), labels = batch
         data = (eeg, spectr)
         x = self.preprocess(data)
         y_hat = self(x)
-        predictions = torch.argmax(y_hat, dim=1).cpu().detach().numpy()
-        labels = labels.cpu().detach().numpy()
-        self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
-        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
-                 on_epoch=True,
-                 logger=True)
-        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
+        predictions = torch.argmax(y_hat, dim=1)
+
+        # labels = labels.cpu()
+        # predictions = predictions.cpu()
+        # print(f"Labels: {labels}")
+        # print(f"Predictions: {predictions}")
+        # print(set(labels.numpy()) - set(predictions.numpy()))
+        # print(set(predictions.numpy()) - set(labels.numpy()))
+
+
+        #log metrics
+        self.log('test_accuracy', self.accuracy(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_recall', self.recall(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_precision', self.precision(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_f1', self.f1(predictions, labels), on_step=False, on_epoch=True, logger=True)
+
+
+
+        # self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
+        # self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+        #          logger=True)
+        # self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
+        #          on_epoch=True,
+        #          logger=True)
+        # self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
+        #          logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
-        eeg, spectr, labels = batch
+        (eeg, spectr), labels = batch
         data = (eeg, spectr)
         x = self.preprocess(data)
         return self(x)
@@ -386,7 +412,7 @@ class HMSEEGSpectrClassifierModule(LightningModule):
         return [optimizer], [lr_scheduler_config]
 
     def _common_step(self, batch, batch_idx, stage):
-        eeg, spectr, labels = batch
+        (eeg, spectr), labels = batch
         data = (eeg, spectr)
         data = self.preprocess(data)
 

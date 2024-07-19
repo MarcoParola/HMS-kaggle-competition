@@ -15,7 +15,7 @@ from src.utils import *
 def main(cfg):
 
     import torch
-    print(torch.cuda.is_available())
+    print(f"CUDA available: {torch.cuda.is_available()}")
 
     if cfg.train.seed == -1:
         random_data = os.urandom(4)
@@ -29,6 +29,7 @@ def main(cfg):
 
 
     if cfg.task == 'eegs':
+        print("EEG only")
         model = HMSEEGClassifierModule(
             signal_len=cfg.dataset.signal_length,
             num_classes=cfg.dataset.num_classes,
@@ -36,6 +37,7 @@ def main(cfg):
             max_epochs=cfg.train.max_epochs
         )
     elif cfg.task == 'spectr':
+        print("Spectrogram only")
         model = HMSSpectrClassifierModule(
             img_size=cfg.dataset.img_size,
             num_classes=cfg.dataset.num_classes,
@@ -44,20 +46,28 @@ def main(cfg):
         )
 
     elif cfg.task == 'eegsspectr' and cfg.train.freeze:
+        print("***** EEG and Spectrogram - freezed backbone *****")
+        print(f"feat_comb_mode: {cfg.train.feat_comb_mode}")
         model = HMSEEGSpectrClassifierModule(
+            eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
+            spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
+            freeze = True,
+            feat_comb_mode=cfg.train.feat_comb_mode,
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
         )
         
     elif cfg.task == 'eegsspectr' and not cfg.train.freeze:
+        print("EEG and Spectrogram - unfreezed backbone")
         model = HMSEEGSpectrClassifierModule(
             eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
             spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
+            freeze = False,
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs,
-            feat_comb_mode=cfg.train.feat_comb_mode
+            transform=transformations
         )
 
     transformations = get_transformations(cfg)
@@ -88,13 +98,16 @@ def main(cfg):
     # test model
     trainer.test(model, data.test_dataloader())
 
-    # Get predictions and ground truth labels
-    y_true = []
-    y_pred = []
-    for batch in data.test_dataloader():
-        x, y = batch
-        y_true.extend(y.numpy())
-        y_pred.extend(model(x).argmax(dim=1).numpy())
+    # # Get predictions and ground truth labels
+    # y_true = []
+    # y_pred = []
+    # for batch in data.test_dataloader():
+    #     x, y = batch
+    #     #print x and y type
+    #     print(f"Type of x: {type(x)}")
+    #     print(f"Type of y: {type(y)}")
+    #     y_true.extend(y.numpy())
+    #     y_pred.extend(model(x).argmax(dim=1).numpy())
 
     #cm = confusion_matrix(y_true, y_pred)
 
@@ -105,8 +118,8 @@ def main(cfg):
     #plt.title("Confusion Matrix")
     #plt.show()
 
-    print("Classification Report:\n")
-    print(classification_report(y_true, y_pred, target_names=data.train_dataset.class_names))
+    # print("Classification Report:\n")
+    # print(classification_report(y_true, y_pred, target_names=data.train_dataset.class_names))
 
 
 if __name__ == "__main__":

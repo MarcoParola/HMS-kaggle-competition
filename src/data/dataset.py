@@ -9,15 +9,16 @@ from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 
-# from src.utils import apply_bandpass_filter
 
 class HMSSignalClassificationDataset(Dataset):
-    def __init__(self, stage, data_dir, mode, freeze, transform=None):
+    def __init__(self, stage, data_dir, mode, freeze, highcut, norm_type, transform=None):
         print(f"Loading {stage} dataset in {mode} mode")
         self.stage = stage
         self.data_dir = data_dir
         self.mode = mode
         self.freeze = freeze
+        self.highcut = highcut
+        self.norm_type = norm_type
         csv_file = os.path.join(data_dir, f"{stage}_{mode}.csv")
         data = pd.read_csv(csv_file)
 
@@ -40,11 +41,8 @@ class HMSSignalClassificationDataset(Dataset):
 
         self.transform = transform
         # passo anche spec_features_transform e eeg_features_transform per la features extraction
-        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform = transform
-        
-        # print(f"eeg_transform: {self.eeg_transform}")
-        # print(f"spectr_transform: {self.spectr_transform}")
-        # print(f"features_transform: {self.features_transform
+        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform = transform 
+        #self.eeg_transform = None
 
     def __len__(self):
         return len(self.eeg_ids)
@@ -54,16 +52,20 @@ class HMSSignalClassificationDataset(Dataset):
         expert_consensus = self.expert_consensus[idx]
 
         label = self.label_encoder.transform([expert_consensus])[0]  # etichetta
-        label = torch.tensor(label, dtype=torch.long)
+        label = torch.tensor(label, dtype=torch.long).to('cuda')
         label_id = self.label_id[idx]
 
         if self.mode == 'eegs':
-            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_40Hz/{label_id}.csv")
-            eeg_df = pd.read_csv(eeg_file)
-            # eeg_df = apply_bandpass_filter(eeg_df)
+            eeg_file = os.path.join(self.data_dir, f"{self.mode}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
+            eeg_df = pd.read_parquet(eeg_file)
 
+            # eeg_values = eeg_df.values.astype('float32').T #.
+            # eeg_tensor = torch.tensor(eeg_values)
+
+            eeg_tensor = torch.tensor(eeg_df.values).to('cuda')
             if self.eeg_transform:
-                eeg = self.eeg_transform(eeg_df)
+                eeg = self.eeg_transform(eeg_tensor)
+            eeg = eeg_tensor.T
 
             # print(f"EEG shape: {eeg.shape}")
 
@@ -79,13 +81,18 @@ class HMSSignalClassificationDataset(Dataset):
             return image, label
     
         elif self.mode == 'eegsspectr' and self.freeze==False:
+
             # eeg_file = os.path.join(self.data_dir, f"{self.stage}_{self.mode}", f"{label_id}.csv")
-            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_40Hz/{label_id}.csv")
-            eeg_df = pd.read_csv(eeg_file)
+            eeg_file = os.path.join(self.data_dir, f"{self.mode}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
+            eeg_df = pd.read_parquet(eeg_file)
+
             # eeg_values = eeg_df.values.astype('float32').T
             # eeg = torch.tensor(eeg_values)
+
+            eeg_tensor = torch.tensor(eeg_df.values).to('cuda')
             if self.eeg_transform:
-                eeg = self.eeg_transform(eeg_df)
+                eeg = self.eeg_transform(eeg_tensor)
+            eeg = eeg_tensor.T
 
             spectr_file = os.path.join(self.data_dir, "spectr_windows", f"{label_id}.png")
             image = Image.open(spectr_file).convert('RGB')
@@ -125,6 +132,8 @@ class FeatureDataset(Dataset):
         print(f"EEG features tensor shape: {self.eeg_features.shape}")
         print(f"Spectrogram features tensor shape: {self.spec_features.shape}")
         print(f"Labels tensor shape: {self.labels.shape}")
+
+
 
     def __getitem__(self, index):
         eeg = self.eeg_features[index]

@@ -34,8 +34,9 @@ def main(cfg):
             signal_len=cfg.dataset.signal_length,
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
-            max_epochs=cfg.train.max_epochs
+            max_epochs=cfg.train.max_epochs,
         )
+
     elif cfg.task == 'spectr':
         print("Spectrogram only")
         model = HMSSpectrClassifierModule(
@@ -45,39 +46,34 @@ def main(cfg):
             max_epochs=cfg.train.max_epochs
         )
 
-    elif cfg.task == 'eegsspectr' and cfg.train.freeze:
-        print("***** EEG and Spectrogram - freezed backbone *****")
+    elif cfg.task == 'eegsspectr':
+        
+        if cfg.train.freeze:
+            print("***** EEG and Spectrogram - freezed backbone *****")
+        else:
+            print("***** EEG and Spectrogram - unfreezed backbone *****")
         print(f"feat_comb_mode: {cfg.train.feat_comb_mode}")
+
         model = HMSEEGSpectrClassifierModule(
             eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
             spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
-            freeze = True,
+            freeze = cfg.train.freeze,
             feat_comb_mode=cfg.train.feat_comb_mode,
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
-        )
-        
-    elif cfg.task == 'eegsspectr' and not cfg.train.freeze:
-        print("EEG and Spectrogram - unfreezed backbone")
-        model = HMSEEGSpectrClassifierModule(
-            eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
-            spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
-            freeze = False,
-            num_classes=cfg.dataset.num_classes,
-            lr=cfg.train.lr,
-            max_epochs=cfg.train.max_epochs,
-            transform=transformations
         )
 
     transformations = get_transformations(cfg)
 
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
-        batch_size=cfg.train.batch_size,
         mode=cfg.task,
         freeze=cfg.train.freeze,
-        transform=transformations,
+        highcut=cfg.dataset.highcut,
+        norm_type=cfg.dataset.norm_type,
+        batch_size=cfg.train.batch_size,
+        transform=transformations        
     )
 
     # training
@@ -88,7 +84,6 @@ def main(cfg):
         accelerator=cfg.train.accelerator,
         devices=cfg.train.devices,
         max_epochs=cfg.train.max_epochs,
-        fast_dev_run=False,
         enable_progress_bar=True
     )
 
@@ -97,29 +92,6 @@ def main(cfg):
 
     # test model
     trainer.test(model, data.test_dataloader())
-
-    # # Get predictions and ground truth labels
-    # y_true = []
-    # y_pred = []
-    # for batch in data.test_dataloader():
-    #     x, y = batch
-    #     #print x and y type
-    #     print(f"Type of x: {type(x)}")
-    #     print(f"Type of y: {type(y)}")
-    #     y_true.extend(y.numpy())
-    #     y_pred.extend(model(x).argmax(dim=1).numpy())
-
-    #cm = confusion_matrix(y_true, y_pred)
-
-    #plt.figure(figsize=(10, 8))
-    #sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=data.train_dataset.class_names, yticklabels=data.train_dataset.class_names)
-    #plt.xlabel("Predicted labels")
-    #plt.ylabel("True labels")
-    #plt.title("Confusion Matrix")
-    #plt.show()
-
-    # print("Classification Report:\n")
-    # print(classification_report(y_true, y_pred, target_names=data.train_dataset.class_names))
 
 
 if __name__ == "__main__":

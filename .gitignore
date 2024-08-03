@@ -9,8 +9,10 @@ outputs/
 src/data/outputs/
 checkpoint/
 dataset_old/
+scripts_old/
+submission/
 
-scripts_old
+sumbission.csv
 scripts/*.png 
 scripts/*.txt
 

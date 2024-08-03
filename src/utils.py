@@ -1,14 +1,16 @@
 import torch
-import numpy as np
 import pandas as pd
 import flatdict
-import torchvision
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-import wandb
+# import wandb
 import torchvision.transforms as transforms
+
+from scipy.signal import butter, filtfilt
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def get_checkpoint(cfg):
@@ -39,7 +41,6 @@ def get_early_stopping(cfg):
     return early_stopping_callback
 
 
-
 class NormalizeEEG:
     def __init__(self, cfg):
         print("USing signal normalization")
@@ -57,12 +58,18 @@ class NormalizeEEG:
         # print("Train std: ", self.train_std)
 
 
-    def __call__(self, df):
-        # print("df: ", df.describe())
-        normalized_df = (df - self.train_mean) / (self.train_std)
-        # print("Normalized df: ", normalized_df.describe())
+    def __call__(self, eeg):
+        # Converti eeg da dataframe a torch tensor e trasferisci sulla GPU
+        eeg_tensor = torch.tensor(eeg.values, dtype=torch.float32).to('cuda')
 
-        return torch.tensor(normalized_df.values.T, dtype=torch.float32)
+        # print("eeg: ", eeg_tensor)
+        normalized_eeg = (eeg_tensor - self.train_mean) / (self.train_std)
+        # print("Normalized eeg: ", normalized_eeg)
+
+        # transpose eeg tensor
+        normalized_eeg = normalized_eeg.T
+
+        return normalized_eeg.float()
         
 
 class NormalizeEegFeatures:
@@ -118,10 +125,32 @@ class NormalizeSpecFeatures:
         return normalized_feature_vec
 
 
+
 def get_transformations(cfg):
+
+    eegs_stats= pd.read_csv(cfg.dataset.eeg_stats)
+    eegs_train_mean = eegs_stats['Mean']
+    eegs_train_std = eegs_stats['Std']
+    eegs_train_min = eegs_stats['Min']
+    eegs_train_max = eegs_stats['Max']
+
+    eegs_train_mean = torch.tensor(eegs_train_mean).to('cuda')
+    eegs_train_std = torch.tensor(eegs_train_std).to('cuda')
+    eegs_train_min = torch.tensor(eegs_train_min).to('cuda')
+    eegs_train_max = torch.tensor(eegs_train_max).to('cuda')
+
+    def scale(x):
+        if cfg.dataset.norm_type == 'mean_std':
+            x = (x - eegs_train_mean) / eegs_train_std
+        elif cfg.dataset.norm_type == 'min_max':
+            x = (x - eegs_train_min) / (eegs_train_max - eegs_train_min)
+        else:   
+            raise ValueError("Invalid norm_type")
+        return x.T.float()
     
     eegs_transform = transforms.Compose([
-        NormalizeEEG(cfg)
+        # NormalizeEEG(cfg),
+        scale,
     ])
 
     spectr_transform = transforms.Compose([
@@ -171,3 +200,17 @@ def get_loggers(cfg):
 
     return loggers
 
+
+# Funzione per creare il filtro passabanda
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+# Funzione per applicare il filtro passabanda
+def apply_bandpass_filter(data, lowcut=0.5, highcut=40.0, fs=200.0, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = filtfilt(b, a, data, axis=0)
+    return y

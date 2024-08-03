@@ -6,7 +6,7 @@ from src.utils import get_transformations
 
 
 class HMSSignalClassificationDataModule(LightningDataModule):
-    def __init__(self, data_dir, mode, freeze, batch_size=32, transform=None):
+    def __init__(self, data_dir, mode, freeze, highcut, norm_type, batch_size=32, transform=None):
         super().__init__()
 
         if mode=="eegsspectr" and freeze:
@@ -16,11 +16,10 @@ class HMSSignalClassificationDataModule(LightningDataModule):
             self.test_dataset = FeatureDataset("test", data_dir, transform)   
         else:
             print("Using HMSSignalClassificationDataset")
-            self.train_dataset = HMSSignalClassificationDataset("train", data_dir, mode, freeze, transform=transform)
-            self.val_dataset = HMSSignalClassificationDataset("val", data_dir, mode, freeze, transform=transform)
-            self.test_dataset = HMSSignalClassificationDataset("test", data_dir, mode, freeze, transform=transform)
+            self.train_dataset = HMSSignalClassificationDataset("train", data_dir, mode, freeze, highcut, norm_type, transform=transform)
+            self.val_dataset = HMSSignalClassificationDataset("val", data_dir, mode, freeze, highcut, norm_type, transform=transform)
+            self.test_dataset = HMSSignalClassificationDataset("test", data_dir, mode, freeze, highcut, norm_type, transform=transform)
         self.batch_size = batch_size
-
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)

@@ -31,17 +31,16 @@ class HMSEEGClassifierModule(LightningModule):
         self.total_predictions = None
         self.classes = [i for i in range(num_classes)]
 
+        self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
+        self.recall = torchmetrics.classification.Recall(task="multiclass", average='weighted', num_classes=num_classes)
+        self.precision = torchmetrics.classification.Precision(task="multiclass", average='weighted', num_classes=num_classes)
+        self.f1 = torchmetrics.classification.F1Score(task="multiclass", average='weighted', num_classes=num_classes)
+
+        with open('submission.csv', 'w') as f:
+            f.write('seizure_vote,lpd_vote,gpd_vote,lrda_vote,grda_vote,other_vote\n')
+
+
     def preprocess(self, x):
-        # see MNE lib
-
-        # drop EKG
-
-        # normalize label votes
-        # labels = df[vote_cols].values
-        # labels = torch.from_numpy(labels).double()
-        # labels = labels / labels.sum(dim=1, keepdim=True) # Normalize vote ratios
-
-        # see Hz characteristics
 
         return x
 
@@ -63,6 +62,7 @@ class HMSEEGClassifierModule(LightningModule):
         return x
 
     def forward(self, x):
+        # print("Features shape input", x.shape) #[32, 20, 2000]
         x = self.relu(self.conv1(x))
         x = self.pool(x)
         x = self.relu(self.conv2(x))
@@ -72,12 +72,11 @@ class HMSEEGClassifierModule(LightningModule):
         x = self.relu(self.conv4(x))
         x = self.pool(x)
         x = self.relu(self.conv5(x))
-        x = self.pool(x)
+        x = self.pool(x)        # after pool -> [32, 512, 62]
 
-        x = x.view(-1, self.fc_input_size)
+        x = x.view(-1, self.fc_input_size)  # before fc1 -> # [32, 31744]
 
-        x = self.relu(self.fc1(x))
-        print("Features shape", x.shape) # Features shape torch.Size([32, 128])     4.6 M Trainable params
+        x = self.relu(self.fc1(x))  # Features shape torch.Size([32, 128])     4.6 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -93,17 +92,24 @@ class HMSEEGClassifierModule(LightningModule):
     def test_step(self, batch, batch_idx):
         self.eval()
         eegs, labels = batch
+        
         x = self.preprocess(eegs)
         y_hat = self(x)
         predictions = torch.argmax(y_hat, dim=1)
-        self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
-        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
-                 on_epoch=True,
-                 logger=True)
-        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
+
+        y_hat_np = y_hat.detach().cpu().numpy()
+
+        with open('submission.csv', 'a') as f:
+            for probs in y_hat_np:
+                probs_str = ','.join(map(str, probs))
+                f.write(f'{probs_str}\n')
+
+        #log metrics
+        self.log('test_accuracy', self.accuracy(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_recall', self.recall(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_precision', self.precision(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_f1', self.f1(predictions, labels), on_step=False, on_epoch=True, logger=True)
+
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         eeg, label = batch
@@ -151,6 +157,12 @@ class HMSSpectrClassifierModule(LightningModule):
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss()
+
+        self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
+        self.recall = torchmetrics.classification.Recall(task="multiclass", average='weighted', num_classes=num_classes)
+        self.precision = torchmetrics.classification.Precision(task="multiclass", average='weighted', num_classes=num_classes)
+        self.f1 = torchmetrics.classification.F1Score(task="multiclass", average='weighted', num_classes=num_classes)
+
 
     def preprocess(self, x):
         return x
@@ -205,15 +217,23 @@ class HMSSpectrClassifierModule(LightningModule):
         images, labels = batch
         x = self.preprocess(images)
         y_hat = self(x)
+
+        print("y_hat: ", y_hat)
+        # write y_hat to file submission.csv with class names
+        with open('submission.csv', 'w') as f:
+            f.write('Id,Category\n')
+            for i, pred in enumerate(y_hat):
+                f.write(f'{i},{self.classes[pred]}\n')
+
+
         predictions = torch.argmax(y_hat, dim=1)
-        self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
-        self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
-                 on_epoch=True,
-                 logger=True)
-        self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-                 logger=True)
+
+        #log metrics
+        self.log('test_accuracy', self.accuracy(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_recall', self.recall(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_precision', self.precision(predictions, labels), on_step=False, on_epoch=True, logger=True)
+        self.log('test_f1', self.f1(predictions, labels), on_step=False, on_epoch=True, logger=True)
+
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         images, label = batch
@@ -246,7 +266,6 @@ class HMSEEGSpectrClassifierModule(LightningModule):
     def __init__(self, num_classes, eegs_model_path = "", spectr_model_path = "", freeze=True, lr=1e-5, max_epochs=100, feat_comb_mode=None):
         super().__init__()
         self.save_hyperparameters()
-        self.freeze = False
 
         # load eeg model
         self.eeg_model = HMSEEGClassifierModule.load_from_checkpoint(eegs_model_path)
@@ -256,8 +275,12 @@ class HMSEEGSpectrClassifierModule(LightningModule):
         self.freeze = freeze
         self.feature_comb_mode = feat_comb_mode
         
-        self.fc1 = nn.Linear(256, 128)
+        if feat_comb_mode == 'concat':
+            self.fc1 = nn.Linear(256, 128)
+        else:
+            self.fc1 = nn.Linear(128, 128)
         self.fc2 = nn.Linear(128, num_classes)
+
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss()
 
@@ -271,15 +294,14 @@ class HMSEEGSpectrClassifierModule(LightningModule):
         return x
 
     def forward(self, x):
-        eeg, spectr = x
+        eeg_features, spectr_features = x
 
         if self.freeze:
-            eeg_features = eeg
-            spectr_features = spectr
 
             # print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
             # print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
         
+
             # switch self.feature_comb_mode
             if self.feature_comb_mode == 'concat':
                 combined_features = torch.cat((eeg_features, spectr_features), dim=1)
@@ -289,8 +311,10 @@ class HMSEEGSpectrClassifierModule(LightningModule):
                 combined_features = eeg_features - spectr_features
             elif self.feature_comb_mode == 'mul':
                 combined_features = eeg_features * spectr_features
-            elif self.feature_comb_mode == 'weighted_sum':
+            elif self.feature_comb_mode == 'w_sum_eeg':
                 combined_features = 0.7 * eeg_features + 0.3 * spectr_features
+            elif self.feature_comb_mode == 'w_sum_spectr':
+                combined_features = 0.3 * eeg_features + 0.7 * spectr_features
             else:
                 raise ValueError("Invalid feature combination mode")
 
@@ -302,31 +326,19 @@ class HMSEEGSpectrClassifierModule(LightningModule):
             # # print combined features data type
             # print(f"Combined features data type: {combined_features.dtype}") 
 
+            # print("EEG features: ", eeg_features)
+            # print("Spectrogram features: ", spectr_features)
+            # print("Combined features: ", combined_features)
+
 
         else:   
-            eeg_features = self.eeg_model.extract_features(eeg)
-            spectr_features = self.spectr_model.extract_features(spectr)
+            eeg_features = self.eeg_model.extract_features(eeg_features)
+            spectr_features = self.spectr_model.extract_features(spectr_features)
 
             # print(f"EEG features shape: {eeg_features.shape}")		#(32, 128)
             # print(f"Spectrogram features shape: {spectr_features.shape}")    #(32,128)
 
-            # normalizzazione features
-            eeg_features_np = eeg_features
-            spectr_features_np = spectr_features
 
-            eeg_features_normalized = torch.tensor(eeg_features_normalized, device=eeg_features.device)
-            spectr_features_normalized = torch.tensor(spectr_features_normalized, device=spectr_features.device)
-
-            # stampe di controllo
-            #eeg_features_df = pd.DataFrame(eeg_features)
-            #spectr_features_df = pd.DataFrame(spectr_features)
-            #eeg_features_desc = eeg_features_df.describe()
-            #spectr_features_desc = spectr_features_df.describe()
-            #eeg_features_desc.to_csv('scripts/eeg_features_description.csv')
-            #spectr_features_desc.to_csv('scripts/spectr_features_description.csv')
-        
-
-            combined_features = torch.cat((eeg_features_normalized, spectr_features_normalized), dim=1)
             # switch self.feature_comb_mode
             if self.feature_comb_mode == 'concat':
                 combined_features = torch.cat((eeg_features, spectr_features), dim=1)
@@ -369,30 +381,12 @@ class HMSEEGSpectrClassifierModule(LightningModule):
         y_hat = self(x)
         predictions = torch.argmax(y_hat, dim=1)
 
-        # labels = labels.cpu()
-        # predictions = predictions.cpu()
-        # print(f"Labels: {labels}")
-        # print(f"Predictions: {predictions}")
-        # print(set(labels.numpy()) - set(predictions.numpy()))
-        # print(set(predictions.numpy()) - set(labels.numpy()))
-
-
         #log metrics
         self.log('test_accuracy', self.accuracy(predictions, labels), on_step=False, on_epoch=True, logger=True)
         self.log('test_recall', self.recall(predictions, labels), on_step=False, on_epoch=True, logger=True)
         self.log('test_precision', self.precision(predictions, labels), on_step=False, on_epoch=True, logger=True)
         self.log('test_f1', self.f1(predictions, labels), on_step=False, on_epoch=True, logger=True)
 
-
-
-        # self.log('test_accuracy', accuracy_score(labels, predictions), on_step=False, on_epoch=True, logger=True)
-        # self.log('test_recall', recall_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-        #          logger=True)
-        # self.log('test_precision', precision_score(labels, predictions, average='weighted'), on_step=False,
-        #          on_epoch=True,
-        #          logger=True)
-        # self.log('test_f1', f1_score(labels, predictions, average='weighted'), on_step=False, on_epoch=True,
-        #          logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         (eeg, spectr), labels = batch

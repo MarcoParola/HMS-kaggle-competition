@@ -11,6 +11,8 @@ dataset:
   eeg_stats: "./dataset/filtered_40Hz_eeg_windows_stats.csv"
   features_eeg_stats: "./dataset/features_eeg_stats.csv"
   features_spec_stats: "./dataset/features_spec_stats.csv"
+  highcut: 40
+  norm_type: min_max # mean_std | min_max
 
   # eeg_stats: "./dataset/filtered_40Hz_hq_eeg_windows_stats.csv"
   only_high_quality: False
@@ -22,12 +24,13 @@ train:
   lr: 0.000004
   accelerator: "gpu"
   devices: 1
-  max_epochs: 4
+  max_epochs: 100
   freeze: True         
-  feat_comb_mode: 'concat'        # concat | sum | mul | weighted_sum
+  feat_comb_mode: 'concat'        # concat | sum | mul | w_sum_eeg | w_sum_spectr 
   # eegs_run_name: "worthy-snowflake-208"
-  eegs_run_name: "still-shape-233"
+  eegs_run_name: "frosty-serenity-328"    # "still-shape-233"
   spectr_run_name: "unique-frost-211"
+  eegsspectr_run_name: "vital-frost-279"
 
 checkpoint:
   version: 0

@@ -7,7 +7,7 @@ import numpy as np
 
 # Parametri del filtro
 lowcut = 0.5
-highcut = 80.0
+highcut = 40.0
 fs = 200.0  # Frequenza di campionamento (in Hz)
 
 dataset_dir = "../dataset"

@@ -5,8 +5,8 @@ from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-# import wandb
 import torchvision.transforms as transforms
+# from torchvision.transforms import v2
 
 from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
@@ -40,7 +40,6 @@ def get_early_stopping(cfg):
     )
     return early_stopping_callback
 
-
 class NormalizeEEG:
     def __init__(self, cfg):
         print("USing signal normalization")
@@ -71,7 +70,6 @@ class NormalizeEEG:
 
         return normalized_eeg.float()
         
-
 class NormalizeEegFeatures:
     def __init__(self, cfg):
         print("Using eeg features normalization")
@@ -125,10 +123,15 @@ class NormalizeSpecFeatures:
         return normalized_feature_vec
 
 
-
 def get_transformations(cfg):
 
-    eegs_stats= pd.read_csv(cfg.dataset.eeg_stats)
+    if cfg.dataset.dataset_type == 'full':
+        eegs_stats= pd.read_csv(cfg.dataset.eeg_stats)
+    if cfg.dataset.dataset_type == 'ge4':
+        eegs_stats= pd.read_csv(cfg.dataset.eeg_stats_ge4)
+    if cfg.dataset.dataset_type == 'hq':
+        eegs_stats= pd.read_csv(cfg.dataset.eeg_stats_hq)
+
     eegs_train_mean = eegs_stats['Mean']
     eegs_train_std = eegs_stats['Std']
     eegs_train_min = eegs_stats['Min']
@@ -154,8 +157,12 @@ def get_transformations(cfg):
     ])
 
     spectr_transform = transforms.Compose([
-        transforms.Resize((512, 512)),         
-        transforms.ToTensor(),                 
+        transforms.Resize((cfg.dataset.img_size, cfg.dataset.img_size)),
+        # MixUp and RandomCutout augmentation
+        # v2.RandomCutout(num_holes=1, max_h_size=10, max_w_size=10, fill_value=0, p=0.5),
+        # v2.MixUp(),
+        transforms.ToTensor(),     
+                    
     ])
 
     eeg_features_transform = transforms.Compose([

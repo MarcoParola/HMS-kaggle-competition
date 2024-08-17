@@ -1,21 +1,23 @@
-# task: 'eegs'          # eegs | spectr | eegsspectr
+task: 'eegs'          # eegs | spectr | eegsspectr
 # task: 'spectr'
-task: 'eegsspectr'
+# task: 'eegsspectr'
 
 dataset:
   data_dir: ./dataset/
   num_classes: 6
   signal_length: 2000
-  img_size: 512
+  img_size: 256
+  highcut: 40
+
+  norm_type: no # mean_std | min_max
+  dataset_type: 'full'   # full | ge4 | hq 
+
   # eeg_stats: "./dataset/eeg_windows_stats.csv"
   eeg_stats: "./dataset/filtered_40Hz_eeg_windows_stats.csv"
+  eeg_stats_ge4: "./dataset/filtered_40Hz_ge4_eeg_windows_stats.csv"
+  eeg_stats_hq: "./dataset/filtered_40Hz_hq_eeg_windows_stats.csv"
   features_eeg_stats: "./dataset/features_eeg_stats.csv"
   features_spec_stats: "./dataset/features_spec_stats.csv"
-  highcut: 40
-  norm_type: min_max # mean_std | min_max
-
-  # eeg_stats: "./dataset/filtered_40Hz_hq_eeg_windows_stats.csv"
-  only_high_quality: False
 
 train:
   save_path: "./checkpoint/"
@@ -27,7 +29,7 @@ train:
   max_epochs: 100
   freeze: True         
   feat_comb_mode: 'concat'        # concat | sum | mul | w_sum_eeg | w_sum_spectr 
-  # eegs_run_name: "worthy-snowflake-208"
+  # eegs_run_name: "worthy-snowflake-208" # "astral-snowball-217"
   eegs_run_name: "frosty-serenity-328"    # "still-shape-233"
   spectr_run_name: "unique-frost-211"
   eegsspectr_run_name: "vital-frost-279"
@@ -37,7 +39,7 @@ checkpoint:
 
 log:
   path: "./logs/"
-  wandb: False
+  wandb: True
 
 wandb:
   entity: martina-marino1996

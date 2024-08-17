@@ -1,25 +1,34 @@
+import os
 import torch
 import torch.utils.data
 import torchvision.transforms as transforms
-import os
-import pandas as pd
+from torch.utils.data import Dataset
+
 import hydra
+import pandas as pd
+import numpy as np
+
 from sklearn.preprocessing import LabelEncoder
 from PIL import Image
-from torch.utils.data import Dataset
-import numpy as np
 
 
 class HMSSignalClassificationDataset(Dataset):
-    def __init__(self, stage, data_dir, mode, freeze, highcut, norm_type, transform=None):
-        print(f"Loading {stage} dataset in {mode} mode")
+
+    def __init__(self, stage, data_dir, task, freeze, highcut, dataset_type, transform=None):
+        print(f"Loading {stage} dataset in {task} mode")
         self.stage = stage
         self.data_dir = data_dir
-        self.mode = mode
+        self.task = task
         self.freeze = freeze
         self.highcut = highcut
-        self.norm_type = norm_type
-        csv_file = os.path.join(data_dir, f"{stage}_{mode}.csv")
+        self.dataset_type = dataset_type
+        if dataset_type == 'full':
+            csv_file = os.path.join(data_dir, f"{stage}_{task}.csv")
+        if dataset_type == 'ge4':
+            csv_file = os.path.join(data_dir, f"ge4_{stage}.csv")
+        if dataset_type == 'hq':
+            csv_file = os.path.join(data_dir, f"hq_{stage}.csv")
+
         data = pd.read_csv(csv_file)
 
         self.eeg_ids = data["eeg_id"]
@@ -42,7 +51,6 @@ class HMSSignalClassificationDataset(Dataset):
         self.transform = transform
         # passo anche spec_features_transform e eeg_features_transform per la features extraction
         self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform = transform 
-        #self.eeg_transform = None
 
     def __len__(self):
         return len(self.eeg_ids)
@@ -50,28 +58,30 @@ class HMSSignalClassificationDataset(Dataset):
     def __getitem__(self, idx):
 
         expert_consensus = self.expert_consensus[idx]
-
-        label = self.label_encoder.transform([expert_consensus])[0]  # etichetta
+        label = self.label_encoder.transform([expert_consensus])[0]
         label = torch.tensor(label, dtype=torch.long).to('cuda')
         label_id = self.label_id[idx]
 
-        if self.mode == 'eegs':
-            eeg_file = os.path.join(self.data_dir, f"{self.mode}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
-            eeg_df = pd.read_parquet(eeg_file)
+        if self.task == 'eegs':
+            # eeg_file = os.path.join(self.data_dir, f"{self.task}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
+            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_{self.highcut}Hz/{label_id}.csv")
+            # eeg_file = os.path.join(self.data_dir, f"eeg_windows/{label_id}.parquet")
 
-            # eeg_values = eeg_df.values.astype('float32').T #.
+            eeg_df = pd.read_csv(eeg_file)
+
+            # eeg_values = eeg_df.values.astype('float').T #.
             # eeg_tensor = torch.tensor(eeg_values)
 
             eeg_tensor = torch.tensor(eeg_df.values).to('cuda')
-            if self.eeg_transform:
-                eeg = self.eeg_transform(eeg_tensor)
-            eeg = eeg_tensor.T
+            # if self.eeg_transform:
+            #     eeg = self.eeg_transform(eeg_tensor)
+            eeg = eeg_tensor.T.float()
 
             # print(f"EEG shape: {eeg.shape}")
 
             return eeg, label
 
-        elif self.mode == 'spectr':
+        elif self.task == 'spectr':
             spectr_file = os.path.join(self.data_dir, "spectr_windows", f"{label_id}.png")
             image = Image.open(spectr_file).convert('RGB')
 
@@ -80,10 +90,10 @@ class HMSSignalClassificationDataset(Dataset):
 
             return image, label
     
-        elif self.mode == 'eegsspectr' and self.freeze==False:
+        elif self.task == 'eegsspectr' and self.freeze==False:
 
-            # eeg_file = os.path.join(self.data_dir, f"{self.stage}_{self.mode}", f"{label_id}.csv")
-            eeg_file = os.path.join(self.data_dir, f"{self.mode}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
+            # eeg_file = os.path.join(self.data_dir, f"{self.stage}_{self.task}", f"{label_id}.csv")
+            eeg_file = os.path.join(self.data_dir, f"{self.task}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
             eeg_df = pd.read_parquet(eeg_file)
 
             # eeg_values = eeg_df.values.astype('float32').T
@@ -133,8 +143,6 @@ class FeatureDataset(Dataset):
         print(f"Spectrogram features tensor shape: {self.spec_features.shape}")
         print(f"Labels tensor shape: {self.labels.shape}")
 
-
-
     def __getitem__(self, index):
         eeg = self.eeg_features[index]
         spec = self.spec_features[index]
@@ -143,6 +151,7 @@ class FeatureDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
 
 @hydra.main(version_base=None, config_path="../../config", config_name="config")
 def main(cfg):

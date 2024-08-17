@@ -34,7 +34,7 @@ def main(cfg):
             signal_len=cfg.dataset.signal_length,
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
-            max_epochs=cfg.train.max_epochs,
+            max_epochs=cfg.train.max_epochs
         )
 
     elif cfg.task == 'spectr':
@@ -68,12 +68,12 @@ def main(cfg):
 
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
-        mode=cfg.task,
+        task=cfg.task,
         freeze=cfg.train.freeze,
         highcut=cfg.dataset.highcut,
-        norm_type=cfg.dataset.norm_type,
         batch_size=cfg.train.batch_size,
-        transform=transformations        
+        transform=transformations,
+        dataset_type=cfg.dataset.dataset_type
     )
 
     # training

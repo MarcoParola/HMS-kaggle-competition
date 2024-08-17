@@ -81,10 +81,12 @@ fs = 200.0  # Frequenza di campionamento (in Hz)
 filtered_eeg_windows_dir = os.path.join(dataset_dir, f'{task}_filtered_eeg_windows_{int(highcut)}Hz')
 if not os.path.exists(filtered_eeg_windows_dir):
     os.makedirs(filtered_eeg_windows_dir)
-    # crea all'interno le cartelle train, val e test
-    os.makedirs(os.path.join(filtered_eeg_windows_dir, 'train'))
-    os.makedirs(os.path.join(filtered_eeg_windows_dir, 'val'))
-    os.makedirs(os.path.join(filtered_eeg_windows_dir, 'test'))
+    if not os.path.exists(os.path.join(filtered_eeg_windows_dir, "train")):
+        os.makedirs(os.path.join(filtered_eeg_windows_dir, "train"))
+    if not os.path.exists(os.path.join(filtered_eeg_windows_dir, "val")):
+        os.makedirs(os.path.join(filtered_eeg_windows_dir, "val"))
+    if not os.path.exists(os.path.join(filtered_eeg_windows_dir, "test")):
+        os.makedirs(os.path.join(filtered_eeg_windows_dir, "test"))
 
 # leggi train, val e test csv
 train_df = pd.read_csv(f"../dataset/train_{task}.csv")

@@ -157,6 +157,8 @@ class HMSSpectrClassifierModule(LightningModule):
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss()
+        self.classes = [i for i in range(num_classes)]
+
 
         self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
         self.recall = torchmetrics.classification.Recall(task="multiclass", average='weighted', num_classes=num_classes)
@@ -199,7 +201,7 @@ class HMSSpectrClassifierModule(LightningModule):
         x = x.view(-1, self.fc_input_size)
 
         x = self.relu(self.fc1(x))
-        print("Features shape", x.shape) # Features shape torch.Size([32, 128])     18.3 M Trainable params
+        #print("Features shape", x.shape) # Features shape torch.Size([32, 128])     18.3 M Trainable params
         x = self.fc2(x)
 
         x = self.softmax(x)
@@ -217,16 +219,14 @@ class HMSSpectrClassifierModule(LightningModule):
         images, labels = batch
         x = self.preprocess(images)
         y_hat = self(x)
-
-        print("y_hat: ", y_hat)
-        # write y_hat to file submission.csv with class names
-        with open('submission.csv', 'w') as f:
-            f.write('Id,Category\n')
-            for i, pred in enumerate(y_hat):
-                f.write(f'{i},{self.classes[pred]}\n')
-
-
         predictions = torch.argmax(y_hat, dim=1)
+
+        y_hat_np = y_hat.detach().cpu().numpy()
+
+        with open('submission.csv', 'a') as f:
+            for probs in y_hat_np:
+                probs_str = ','.join(map(str, probs))
+                f.write(f'{probs_str}\n')
 
         #log metrics
         self.log('test_accuracy', self.accuracy(predictions, labels), on_step=False, on_epoch=True, logger=True)
@@ -283,6 +283,8 @@ class HMSEEGSpectrClassifierModule(LightningModule):
 
         self.softmax = nn.Softmax(dim=1)
         self.loss = nn.CrossEntropyLoss()
+        self.classes = [i for i in range(num_classes)]
+
 
         self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=num_classes)
         self.recall = torchmetrics.classification.Recall(task="multiclass", average='weighted', num_classes=num_classes)

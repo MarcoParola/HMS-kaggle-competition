@@ -12,23 +12,14 @@ parser.add_argument("--highcut", type=float, default=40.0, help="Highcut value f
 args = parser.parse_args()
 
 highcut = args.highcut
+task="eegs"
 
 #stampare il valore highcut
 print(f"Highcut value: {highcut}")
 
 dataset_dir = "../dataset"
 filtered_eeg_windows_dir = os.path.join(dataset_dir, f"filtered_eeg_windows_{int(highcut)}Hz")
-
-# leggere il dataset di train
-train_df = pd.read_csv(os.path.join(dataset_dir, "train_eegs.csv"))
-# per ogni classe stampa il totale di campioni
-print(train_df["expert_consensus"].value_counts())
-
-# sampled_train_df = prop_sample_train_dataset(train_df, n_samples_per_class)
-# # per ogni classe stampa il totale di campioni
-# print(sampled_train_df["expert_consensus"].value_counts())
-
-# sampled_train_df.to_csv(os.path.join(dataset_dir, "sampled_train_eegs.csv"), index=False)
+train_df = pd.read_csv(os.path.join(dataset_dir, "train_hq_eegs.csv"))
 
 # componi un dataframe con la concatenazione di tutti i csv di sampled_train_df
 def create_eeg_windows_df(sampled_train_df: pd.DataFrame, eeg_windows_dir: str) -> pd.DataFrame:
@@ -43,7 +34,7 @@ def create_eeg_windows_df(sampled_train_df: pd.DataFrame, eeg_windows_dir: str) 
     return eeg_windows_df
 
 # leggi sampled_train_df da file csv
-sampled_train_df = pd.read_csv(os.path.join(dataset_dir, "sampled_train_eegs.csv"))
+sampled_train_df = pd.read_csv(os.path.join(dataset_dir, "sampled10_train_eegs.csv"))
 filtered_eeg_windows_df = create_eeg_windows_df(sampled_train_df, filtered_eeg_windows_dir)
 filtered_eeg_windows_df.head()
 
@@ -66,7 +57,7 @@ stats_filtered_df = pd.DataFrame({
 
 print("DataFrame stats:\n", stats_filtered_df)
 
-output_file_path = os.path.join(dataset_dir, f"filtered_{int(highcut)}Hz_eeg_windows_stats.csv")
+output_file_path = os.path.join(dataset_dir, f"filtered_{int(highcut)}Hz_hq_eeg_windows_stats.csv")
 # approssima tutti i valori di output_file_path a 6 decimali
 stats_filtered_df = stats_filtered_df.round(6)
 stats_filtered_df.to_csv(output_file_path, index_label='Channel', header=True)

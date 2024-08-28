@@ -53,7 +53,7 @@ class HMSSignalTestDataset(Dataset):
         self.class_names = ['Seizure', 'LPD', 'GPD', 'LRDA', 'GRDA', 'Other']
 
         self.transform = transform
-        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform = transform 
+        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform, self.eeg_augment, self.spectr_augment = transform 
         #self.eeg_transform = None
 
     def __len__(self):

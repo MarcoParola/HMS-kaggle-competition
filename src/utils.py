@@ -5,12 +5,17 @@ from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
+import torchaudio
+import torchaudio.transforms as T
+from PIL import Image
 import torchvision.transforms as transforms
-# from torchvision.transforms import v2
+from torchvision import transforms
 
 from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from sklearn.utils import resample
 
 
 def get_checkpoint(cfg):
@@ -40,7 +45,6 @@ def get_early_stopping(cfg):
     )
     return early_stopping_callback
 
-class NormalizeEEG:
     def __init__(self, cfg):
         print("USing signal normalization")
 
@@ -70,6 +74,41 @@ class NormalizeEEG:
 
         return normalized_eeg.float()
         
+# Trasformazioni per segnali audio
+class RandomTimeShift:
+    def __init__(self, max_shift_sec=5):
+        self.max_shift_sec = max_shift_sec
+
+    def __call__(self, waveform, sample_rate=200):
+        max_shift = int(self.max_shift_sec * sample_rate)
+        shift = np.random.randint(-max_shift, max_shift)
+        return torch.roll(waveform, shifts=shift, dims=1)
+
+class RandomHorizontalFlipTime:
+    def __call__(self, waveform):
+        return waveform.flip(dims=[1])
+
+class AddGaussianNoise:
+    def __init__(self, mean=0.0, std=1.0):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, waveform):
+        noise = torch.normal(self.mean, self.std, size=waveform.size()).to(waveform.device)
+        return waveform + noise
+
+# Trasformazioni per spettrogrammi
+class XYMasking:
+    def __init__(self, mask_size=(10, 10)):
+        self.mask_size = mask_size
+
+    def __call__(self, image):
+        i, j, h, w = transforms.RandomCrop.get_params(
+            image, output_size=self.mask_size
+        )
+        image[i:i+h, j:j+w] = 0
+        return image
+
 class NormalizeEegFeatures:
     def __init__(self, cfg):
         print("Using eeg features normalization")
@@ -152,17 +191,12 @@ def get_transformations(cfg):
         return x.T.float()
     
     eegs_transform = transforms.Compose([
-        # NormalizeEEG(cfg),
         scale,
     ])
 
     spectr_transform = transforms.Compose([
         transforms.Resize((cfg.dataset.img_size, cfg.dataset.img_size)),
-        # MixUp and RandomCutout augmentation
-        # v2.RandomCutout(num_holes=1, max_h_size=10, max_w_size=10, fill_value=0, p=0.5),
-        # v2.MixUp(),
         transforms.ToTensor(),     
-                    
     ])
 
     eeg_features_transform = transforms.Compose([
@@ -173,7 +207,22 @@ def get_transformations(cfg):
         NormalizeSpecFeatures(cfg)
     ])
 
-    return eegs_transform, spectr_transform, eeg_features_transform, spec_features_transform
+    eeg_augment = transforms.Compose([
+        scale,
+        RandomTimeShift(max_shift_sec=5),
+        RandomHorizontalFlipTime(),
+        AddGaussianNoise(mean=0.0, std=0.1)
+    ])
+
+    spectr_augment = transforms.Compose([
+        transforms.Resize((cfg.dataset.img_size, cfg.dataset.img_size)),
+        transforms.ToTensor(),
+        transforms.RandomErasing(p=0.5, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=0),  # Replaces RandomCutout
+        transforms.RandomHorizontalFlip(),
+        XYMasking(mask_size=(20, 20)),
+    ])
+
+    return eegs_transform, spectr_transform, eeg_features_transform, spec_features_transform, eeg_augment, spectr_augment
 
 
 
@@ -221,3 +270,65 @@ def apply_bandpass_filter(data, lowcut=0.5, highcut=40.0, fs=200.0, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = filtfilt(b, a, data, axis=0)
     return y
+
+
+def augment(data):
+    """
+    Effettua l'oversampling del dataset per bilanciare le classi e 
+    aggiunge una colonna "augmented" per indicare quali campioni sono duplicati.
+
+    Args:
+        data (pd.DataFrame): DataFrame contenente il dataset originale, 
+        con una colonna 'expert_consensus' che indica le classi.
+
+    Returns:
+        pd.DataFrame: DataFrame bilanciato con la colonna "augmented" aggiunta.
+    """
+    # Determina la classe maggioritaria
+    max_class_count = data['expert_consensus'].value_counts().max()
+
+    # Lista per raccogliere i DataFrame di ogni classe bilanciata
+    df_list = []
+
+    # Itera su ogni classe
+    for class_value in data['expert_consensus'].unique():
+        # Seleziona i campioni della classe corrente
+        df_class = data[data['expert_consensus'] == class_value]
+        # Numero di campioni da aggiungere
+        n_samples_to_add = max_class_count - len(df_class)
+
+        if n_samples_to_add > 0:
+            # Duplica i campioni della classe corrente fino a raggiungere la dimensione della classe maggioritaria
+            df_class_balanced_original = df_class.copy()  # Mantieni gli originali
+            df_class_balanced_augmented = resample(df_class, 
+                                                   replace=True,  # Duplicazione permessa
+                                                   n_samples=n_samples_to_add,  # Numero di campioni da aggiungere
+                                                   random_state=42)  # Riproducibilità
+
+            # Aggiungi la colonna "augmented"
+            df_class_balanced_original['augmented'] = 'no'
+            df_class_balanced_augmented['augmented'] = 'yes'
+
+            # Combina originali e duplicati
+            df_class_balanced = pd.concat([df_class_balanced_original, df_class_balanced_augmented])
+        else:
+            # Se la classe è già bilanciata, non duplicare
+            df_class_balanced = df_class.copy()
+            df_class_balanced['augmented'] = 'no'
+
+        # Aggiungi alla lista
+        df_list.append(df_class_balanced)
+
+    # Combina tutte le classi bilanciate in un unico DataFrame
+    df_balanced = pd.concat(df_list)
+    #resetta l'indice
+    df_balanced.reset_index(drop=True, inplace=True)
+    print(f"Tipo di balanced: {type(df_balanced)}")
+
+    return df_balanced
+
+def apply_fft(self, eeg_tensor):
+    # Applica la FFT al segnale EEG e ritorna il modulo della trasformata
+    eeg_freq = torch.fft.fft(eeg_tensor, dim=-1)  # FFT lungo l'ultima dimensione
+    eeg_freq = torch.abs(eeg_freq)  # Prendi il modulo della FFT
+    return eeg_freq

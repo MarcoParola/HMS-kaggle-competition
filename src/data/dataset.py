@@ -11,6 +11,8 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from PIL import Image
 
+from src.utils import augment
+
 
 class HMSSignalClassificationDataset(Dataset):
 
@@ -50,7 +52,17 @@ class HMSSignalClassificationDataset(Dataset):
 
         self.transform = transform
         # passo anche spec_features_transform e eeg_features_transform per la features extraction
-        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform = transform 
+        self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform, self.eeg_augment, self.spectr_augment = transform 
+
+        if dataset_type == 'hq':
+            data = augment(data)
+        else:
+            data["augmented"] = "no"
+        self.augmented = data["augmented"]
+
+        #salva data in un file csv
+        data.to_csv(os.path.join(data_dir, f"{stage}_{task}_augmented.csv"), index=False)
+        
 
     def __len__(self):
         return len(self.eeg_ids)
@@ -61,21 +73,23 @@ class HMSSignalClassificationDataset(Dataset):
         label = self.label_encoder.transform([expert_consensus])[0]
         label = torch.tensor(label, dtype=torch.long).to('cuda')
         label_id = self.label_id[idx]
+        augmented = self.augmented[idx]
 
         if self.task == 'eegs':
             # eeg_file = os.path.join(self.data_dir, f"{self.task}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
-            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_{self.highcut}Hz/{label_id}.csv")
             # eeg_file = os.path.join(self.data_dir, f"eeg_windows/{label_id}.parquet")
-
+            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_{self.highcut}Hz/{label_id}.csv")
             eeg_df = pd.read_csv(eeg_file)
 
             # eeg_values = eeg_df.values.astype('float').T #.
-            # eeg_tensor = torch.tensor(eeg_values)
-
             eeg_tensor = torch.tensor(eeg_df.values).to('cuda')
-            # if self.eeg_transform:
-            #     eeg = self.eeg_transform(eeg_tensor)
-            eeg = eeg_tensor.T.float()
+
+            if augmented == 'yes' and self.eeg_augment:
+                eeg = self.eeg_augment(eeg_tensor)
+            else:
+                eeg = self.eeg_transform(eeg_tensor)
+
+            #eeg = eeg_tensor.T.float()
 
             # print(f"EEG shape: {eeg.shape}")
 
@@ -85,7 +99,9 @@ class HMSSignalClassificationDataset(Dataset):
             spectr_file = os.path.join(self.data_dir, "spectr_windows", f"{label_id}.png")
             image = Image.open(spectr_file).convert('RGB')
 
-            if self.spectr_transform:
+            if augmented == 'yes' and self.spectr_augment:
+                image = self.spectr_augment(image)
+            else:
                 image = self.spectr_transform(image)
 
             return image, label
@@ -93,21 +109,24 @@ class HMSSignalClassificationDataset(Dataset):
         elif self.task == 'eegsspectr' and self.freeze==False:
 
             # eeg_file = os.path.join(self.data_dir, f"{self.stage}_{self.task}", f"{label_id}.csv")
-            eeg_file = os.path.join(self.data_dir, f"{self.task}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
-            eeg_df = pd.read_parquet(eeg_file)
-
-            # eeg_values = eeg_df.values.astype('float32').T
-            # eeg = torch.tensor(eeg_values)
+            # eeg_file = os.path.join(self.data_dir, f"{self.task}_filtered_eeg_windows_{self.highcut}Hz/{self.stage}/{label_id}.parquet")
+            # eeg_df = pd.read_parquet(eeg_file)
+            eeg_file = os.path.join(self.data_dir, f"filtered_eeg_windows_{self.highcut}Hz/{label_id}.csv")
+            eeg_df = pd.read_csv(eeg_file)
 
             eeg_tensor = torch.tensor(eeg_df.values).to('cuda')
-            if self.eeg_transform:
+
+            if augmented == 'yes' and self.eeg_augment:
+                eeg = self.eeg_augment(eeg_tensor)
+            else:
                 eeg = self.eeg_transform(eeg_tensor)
-            eeg = eeg_tensor.T
 
             spectr_file = os.path.join(self.data_dir, "spectr_windows", f"{label_id}.png")
             image = Image.open(spectr_file).convert('RGB')
 
-            if self.spectr_transform:
+            if augmented == 'yes' and self.spectr_augment:
+                image = self.spectr_augment(image)
+            else:
                 image = self.spectr_transform(image)
 
             return (eeg, image), label

@@ -13,9 +13,9 @@ class HMSSignalClassificationDataModule(LightningDataModule):
 
         if task=="eegsspectr" and freeze:
             print("Using FeatureDataset")
-            self.train_dataset = FeatureDataset("train", data_dir, transform, dataset_type)
-            self.val_dataset = FeatureDataset("val", data_dir, transform, dataset_type)
-            self.test_dataset = FeatureDataset("test", data_dir, transform, dataset_type)   
+            self.train_dataset = FeatureDataset("train", data_dir, transform)
+            self.val_dataset = FeatureDataset("val", data_dir, transform)
+            self.test_dataset = FeatureDataset("test", data_dir, transform)
         else:
             print("Using HMSSignalClassificationDataset")
             self.train_dataset = HMSSignalClassificationDataset("train", data_dir, task, freeze, highcut, dataset_type, transform=transform)

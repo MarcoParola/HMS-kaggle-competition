@@ -6,16 +6,16 @@ dataset:
   data_dir: ./dataset/
   num_classes: 6
   signal_length: 2000
-  img_size: 256
-  highcut: 40
+  img_size: 512
+  highcut: 60
 
-  norm_type: no # mean_std | min_max
-  dataset_type: 'full'   # full | ge4 | hq 
+  norm_type: mean_std # mean_std | min_max
+  dataset_type: 'hq'   # full | ge4 | hq 
 
   # eeg_stats: "./dataset/eeg_windows_stats.csv"
-  eeg_stats: "./dataset/filtered_40Hz_eeg_windows_stats.csv"
-  eeg_stats_ge4: "./dataset/filtered_40Hz_ge4_eeg_windows_stats.csv"
-  eeg_stats_hq: "./dataset/filtered_40Hz_hq_eeg_windows_stats.csv"
+  eeg_stats: "./dataset/filtered_60Hz_eeg_windows_stats.csv"
+  eeg_stats_ge4: "./dataset/filtered_60Hz_ge4_eeg_windows_stats.csv"
+  eeg_stats_hq: "./dataset/filtered_60Hz_hq_eeg_windows_stats.csv"
   features_eeg_stats: "./dataset/features_eeg_stats.csv"
   features_spec_stats: "./dataset/features_spec_stats.csv"
 
@@ -39,7 +39,7 @@ checkpoint:
 
 log:
   path: "./logs/"
-  wandb: True
+  wandb: False
 
 wandb:
   entity: martina-marino1996

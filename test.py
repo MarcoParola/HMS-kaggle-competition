@@ -37,24 +37,37 @@ class HMSSignalTestDataModule(LightningDataModule):
 
 
 class HMSSignalTestDataset(Dataset):
-    def __init__(self, stage, data_dir, task, freeze, highcut, norm_type, transform=None):
+    def __init__(self, stage, data_dir, task, freeze, highcut, dataset_type, augmentation, transform=None):
         print(f"Loading {stage} dataset in {task} mode")
         self.stage = stage
         self.data_dir = data_dir
         self.task = task
         self.freeze = freeze
         self.highcut = highcut
-        self.norm_type = norm_type
-        csv_file = os.path.join(data_dir, f"{stage}_{task}.csv")
+        self.dataset_type = dataset_type
+        if dataset_type == 'full':
+            csv_file = os.path.join(data_dir, f"{stage}_{task}.csv")
+        if dataset_type == 'ge4':
+            csv_file = os.path.join(data_dir, f"ge4_{stage}.csv")
+        if dataset_type == 'hq':
+            csv_file = os.path.join(data_dir, f"hq_{stage}.csv")
         data = pd.read_csv(csv_file)
 
         self.eeg_ids = data["eeg_id"]
+
+        self.expert_consensus = data["expert_consensus"]
+        self.seizure_vote = data["seizure_vote"]
+        self.lpd_vote = data["lpd_vote"]
+        self.gpd_vote = data["gpd_vote"]
+        self.lrda_vote = data["lrda_vote"]
+        self.grda_vote = data["grda_vote"]
+        self.other_vote = data["other_vote"]
 
         self.class_names = ['Seizure', 'LPD', 'GPD', 'LRDA', 'GRDA', 'Other']
 
         self.transform = transform
         self.eeg_transform, self.spectr_transform, self.eeg_features_transform, self.spec_features_transform, self.eeg_augment, self.spectr_augment = transform 
-        #self.eeg_transform = None
+
 
     def __len__(self):
         return len(self.eeg_ids)
@@ -91,7 +104,7 @@ def main(cfg):
 
     callbacks = list()
     callbacks.extend([get_early_stopping(cfg), get_checkpoint(cfg), get_lr_monitor(cfg)])
-    loggers = get_loggers(cfg)
+    # loggers = get_loggers(cfg)
 
     transformations = get_transformations(cfg)
 
@@ -110,18 +123,19 @@ def main(cfg):
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
         # data_dir="./submission",
-        batch_size=cfg.train.batch_size,
         task=cfg.task,
         freeze=cfg.train.freeze,
-        transform=transformations,
         highcut=cfg.dataset.highcut,
-        norm_type=cfg.dataset.norm_type,
+        batch_size=cfg.train.batch_size,
+        transform=transformations,
+        dataset_type=cfg.dataset.dataset_type,
+        augmentation=cfg.dataset.augmentation
     )
 
 
     trainer = pl.Trainer(
         default_root_dir='logs/hms/',
-        logger=loggers,
+        # logger=loggers,
         callbacks=callbacks,
         accelerator=cfg.train.accelerator,
         devices=cfg.train.devices,

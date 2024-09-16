@@ -1,6 +1,7 @@
-task: 'eegs'          # eegs | spectr | eegsspectr
+# task: 'eegs'          # eegs | spectr | eegsspectr
 # task: 'spectr'
-# task: 'eegsspectr'
+#task: 'eegsspectr'
+task: 'eegs_cwt'
 
 dataset:
   data_dir: ./dataset/
@@ -11,6 +12,7 @@ dataset:
 
   norm_type: mean_std # mean_std | min_max
   dataset_type: 'hq'   # full | ge4 | hq 
+  augmentation: 'spectr'  # eeg | spectr | both
 
   # eeg_stats: "./dataset/eeg_windows_stats.csv"
   eeg_stats: "./dataset/filtered_60Hz_eeg_windows_stats.csv"
@@ -27,10 +29,10 @@ train:
   accelerator: "gpu"
   devices: 1
   max_epochs: 100
-  freeze: True         
+  freeze: True
   feat_comb_mode: 'concat'        # concat | sum | mul | w_sum_eeg | w_sum_spectr 
   # eegs_run_name: "worthy-snowflake-208" # "astral-snowball-217"
-  eegs_run_name: "frosty-serenity-328"    # "still-shape-233"
+  eegs_run_name: "earthy-plant-499"    # "still-shape-233" | frosty-serenity-328
   spectr_run_name: "unique-frost-211"
   eegsspectr_run_name: "vital-frost-279"
 

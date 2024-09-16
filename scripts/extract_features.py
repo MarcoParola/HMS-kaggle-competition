@@ -19,14 +19,25 @@ def main(cfg):
     data = HMSSignalClassificationDataModule(
         data_dir=cfg.dataset.data_dir,
         batch_size=cfg.train.batch_size,
-        mode='eegsspectr',
         transform=transformations,
-        freeze=False
+        freeze=False,
+        task='eegsspectr',
+        highcut=cfg.dataset.highcut,
+        dataset_type=cfg.dataset.dataset_type,
+        augmentation=cfg.dataset.augmentation
     )
 
     train_loader = data.train_dataloader()
     val_loader = data.val_dataloader()
     test_loader = data.test_dataloader()
+
+    #stampa dimensione dei dataset
+    print("Dimensione del train_dataloader:")
+    print(len(data.train_dataloader().dataset))
+    print("Dimensione del val_dataloader:")
+    print(len(data.val_dataloader().dataset))
+    print("Dimensione del test_dataloader:")
+    print(len(data.test_dataloader().dataset))
 
     batch_size = train_loader.batch_size
 
@@ -43,8 +54,19 @@ def main(cfg):
     # freeze the weights of the models
     model_eeg.freeze()
     model_spec.freeze()
-
-    features_path = './dataset/features/'
+    
+    if cfg.dataset.augmentation == 'both':
+        print("Data augmentation enabled")
+        features_path = './dataset/features_augmented/'
+    elif cfg.dataset.augmentation == 'eeg':
+        print("Data augmentation enabled for EEG data")
+        features_path = './dataset/features_augmented_eeg/'
+    elif cfg.dataset.augmentation == 'spectr':
+        print("Data augmentation enabled for Spectrogram data")
+        features_path = './dataset/features_augmented_spec/'
+    else:
+        print("Data augmentation disabled")
+        features_path = './dataset/features/'
     train_feature_path = os.path.join(features_path, 'train')
     test_feature_path = os.path.join(features_path, 'test')
     val_feature_path = os.path.join(features_path, 'val')

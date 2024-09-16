@@ -6,21 +6,21 @@ from src.utils import get_transformations
 
 
 class HMSSignalClassificationDataModule(LightningDataModule):
-    def __init__(self, data_dir, task, freeze, highcut, dataset_type, batch_size=32, transform=None):
+    def __init__(self, data_dir, task, freeze, highcut, dataset_type, augmentation, batch_size=32, transform=None):
         super().__init__()
 
         print(f"Using only {dataset_type} data")
 
         if task=="eegsspectr" and freeze:
             print("Using FeatureDataset")
-            self.train_dataset = FeatureDataset("train", data_dir, transform)
-            self.val_dataset = FeatureDataset("val", data_dir, transform)
-            self.test_dataset = FeatureDataset("test", data_dir, transform)
+            self.train_dataset = FeatureDataset("train", data_dir, augmentation, transform)
+            self.val_dataset = FeatureDataset("val", data_dir, augmentation, transform)
+            self.test_dataset = FeatureDataset("test", data_dir, augmentation, transform)
         else:
             print("Using HMSSignalClassificationDataset")
-            self.train_dataset = HMSSignalClassificationDataset("train", data_dir, task, freeze, highcut, dataset_type, transform=transform)
-            self.val_dataset = HMSSignalClassificationDataset("val", data_dir, task, freeze, highcut, dataset_type, transform=transform)
-            self.test_dataset = HMSSignalClassificationDataset("test", data_dir, task, freeze, highcut, dataset_type, transform=transform)
+            self.train_dataset = HMSSignalClassificationDataset("train", data_dir, task, freeze, highcut, dataset_type, augmentation, transform=transform)
+            self.val_dataset = HMSSignalClassificationDataset("val", data_dir, task, freeze, highcut, dataset_type, augmentation, transform=transform)
+            self.test_dataset = HMSSignalClassificationDataset("test", data_dir, task, freeze, highcut, dataset_type, augmentation, transform=transform)
         self.batch_size = batch_size
 
     def train_dataloader(self):

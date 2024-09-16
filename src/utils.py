@@ -10,12 +10,16 @@ import torchaudio.transforms as T
 from PIL import Image
 import torchvision.transforms as transforms
 from torchvision import transforms
+import albumentations as A
 
 from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.utils import resample
+
+from pylab import *
+from pathlib import Path
 
 
 def get_checkpoint(cfg):
@@ -45,35 +49,7 @@ def get_early_stopping(cfg):
     )
     return early_stopping_callback
 
-    def __init__(self, cfg):
-        print("USing signal normalization")
 
-        #leggi i valori train mean e std da file, secondo valore di ogni riga
-        stats= pd.read_csv(cfg.dataset.eeg_stats)
-        train_mean = stats['Mean']
-        train_std = stats['Std']
-
-        #converti in numpy array
-        self.train_mean = torch.tensor(train_mean).to('cuda')
-        self.train_std = torch.tensor(train_std).to('cuda')
-
-        # print("Train mean: ", self.train_mean)
-        # print("Train std: ", self.train_std)
-
-
-    def __call__(self, eeg):
-        # Converti eeg da dataframe a torch tensor e trasferisci sulla GPU
-        eeg_tensor = torch.tensor(eeg.values, dtype=torch.float32).to('cuda')
-
-        # print("eeg: ", eeg_tensor)
-        normalized_eeg = (eeg_tensor - self.train_mean) / (self.train_std)
-        # print("Normalized eeg: ", normalized_eeg)
-
-        # transpose eeg tensor
-        normalized_eeg = normalized_eeg.T
-
-        return normalized_eeg.float()
-        
 # Trasformazioni per segnali audio
 class RandomTimeShift:
     def __init__(self, max_shift_sec=5):
@@ -96,18 +72,6 @@ class AddGaussianNoise:
     def __call__(self, waveform):
         noise = torch.normal(self.mean, self.std, size=waveform.size()).to(waveform.device)
         return waveform + noise
-
-# Trasformazioni per spettrogrammi
-class XYMasking:
-    def __init__(self, mask_size=(10, 10)):
-        self.mask_size = mask_size
-
-    def __call__(self, image):
-        i, j, h, w = transforms.RandomCrop.get_params(
-            image, output_size=self.mask_size
-        )
-        image[i:i+h, j:j+w] = 0
-        return image
 
 class NormalizeEegFeatures:
     def __init__(self, cfg):
@@ -189,6 +153,11 @@ def get_transformations(cfg):
         else:   
             raise ValueError("Invalid norm_type")
         return x.T.float()
+
+    def mask(image):
+        image = np.array(image)
+        image = A.XYMasking(num_masks_x=1, mask_x_length=(20, 40), fill_value=0, p=0.5)(image=image)
+        return Image.fromarray(image['image'])
     
     eegs_transform = transforms.Compose([
         scale,
@@ -211,15 +180,15 @@ def get_transformations(cfg):
         scale,
         RandomTimeShift(max_shift_sec=5),
         RandomHorizontalFlipTime(),
-        AddGaussianNoise(mean=0.0, std=0.1)
+        AddGaussianNoise(mean=0.0, std=0.05)
     ])
 
     spectr_augment = transforms.Compose([
-        transforms.Resize((cfg.dataset.img_size, cfg.dataset.img_size)),
+        mask,
+        transforms.Resize((512, 512)),
         transforms.ToTensor(),
-        transforms.RandomErasing(p=0.5, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=0),  # Replaces RandomCutout
-        transforms.RandomHorizontalFlip(),
-        XYMasking(mask_size=(20, 20)),
+        #transforms.RandomErasing(p=0.5, scale=(0.02, 0.1), ratio=(0.5, 1.5), value=0),
+        #transforms.RandomHorizontalFlip(),
     ])
 
     return eegs_transform, spectr_transform, eeg_features_transform, spec_features_transform, eeg_augment, spectr_augment
@@ -327,8 +296,65 @@ def augment(data):
 
     return df_balanced
 
-def apply_fft(self, eeg_tensor):
-    # Applica la FFT al segnale EEG e ritorna il modulo della trasformata
-    eeg_freq = torch.fft.fft(eeg_tensor, dim=-1)  # FFT lungo l'ultima dimensione
-    eeg_freq = torch.abs(eeg_freq)  # Prendi il modulo della FFT
-    return eeg_freq
+
+def apply_stft(image_tensor, n_fft=256, hop_length=128, window='hann'):
+    from scipy import signal
+    # Convert the image tensor to numpy array
+    image_np = image_tensor.cpu().numpy()
+    # Apply STFT on each channel (for RGB images)
+    stft_images = []
+    for i in range(image_np.shape[0]):  # Assuming channels are first dimension
+        f, t, Zxx = signal.stft(image_np[i, :, :], window=window, nperseg=n_fft, noverlap=hop_length)
+        stft_images.append(np.abs(Zxx))
+    # Stack STFT results along a new dimension
+    stft_image_tensor = torch.tensor(np.stack(stft_images), dtype=torch.float32).to(image_tensor.device)
+    return stft_image_tensor
+
+
+def apply_cwt_to_eeg(eeg_data, wavelet='cmor1.0-1.0', n_scales=10):
+    import pywt
+    cwt_results = []
+    
+    # Per ogni canale EEG
+    for channel in eeg_data.columns:
+        signal = eeg_data[channel].values  # Ottieni il segnale dal canale
+        scales = np.arange(1, n_scales + 1)  # Definisci le scale per la CWT
+        
+        # Calcola la CWT
+        cwt_matrix, _ = pywt.cwt(signal, scales=scales, wavelet=wavelet)
+        
+        # Salva il modulo della CWT e aggiungilo alla lista dei risultati
+        cwt_results.append(np.abs(cwt_matrix))
+    
+    # Converti la lista di matrici CWT in un array NumPy con la forma (n_canali, n_scales, n_samples)
+    cwt_results = np.array(cwt_results)  # Forma finale: (n_canali, n_scales, n_samples)
+    
+    return cwt_results
+
+# import torch
+# import torchwavelet as tw
+
+# def apply_cwt_to_eeg(eeg_data, wavelet='cmor', n_scales=64):
+#     # Converti i dati EEG in un tensor PyTorch
+#     eeg_tensor = torch.tensor(eeg_data.values, dtype=torch.float32).cuda()  # Muovi i dati sulla GPU
+#     n_samples, n_channels = eeg_tensor.shape
+
+#     # Prepara la lista per i risultati CWT
+#     cwt_results = []
+
+#     # Per ogni canale EEG
+#     for channel_idx in range(n_channels):
+#         signal = eeg_tensor[:, channel_idx]  # Estrai il segnale dal canale
+#         signal = signal.unsqueeze(0)  # Aggiungi una dimensione batch
+        
+#         # Calcola la CWT
+#         scales = torch.arange(1, n_scales + 1).cuda()  # Muovi le scale sulla GPU
+#         cwt_matrix = tw.cwt(signal, scales, wavelet=wavelet)  # Calcola la CWT
+        
+#         # Salva il modulo della CWT
+#         cwt_results.append(cwt_matrix.abs().cpu().numpy())  # Muovi i risultati indietro sulla CPU e converti in numpy
+
+#     # Converti la lista di matrici CWT in un array NumPy
+#     cwt_results = np.array(cwt_results)  # Forma finale: (n_canali, n_scales, n_samples)
+
+#     return torch.tensor(cwt_results, dtype=torch.float32)  # Converti in PyTorch tensor

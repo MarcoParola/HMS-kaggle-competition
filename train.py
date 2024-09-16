@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from src.data.datamodule import HMSSignalClassificationDataModule
-from src.models.classification import HMSEEGClassifierModule, HMSSpectrClassifierModule
+from src.models.classification import HMSEEGClassifierModule, HMSEEGClassifierWithProbabilities, HMSSpectrClassifierModule, HMSCWTClassifierWithProbabilities
 from src.models.classification import HMSEEGSpectrClassifierModule
 from src.utils import *
 
@@ -32,6 +32,18 @@ def main(cfg):
         print("EEG only")
         model = HMSEEGClassifierModule(
             signal_len=cfg.dataset.signal_length,
+            num_classes=cfg.dataset.num_classes,
+            lr=cfg.train.lr,
+            max_epochs=cfg.train.max_epochs
+        )
+        # model = HMSEEGClassifierWithProbabilities(
+        #     signal_len=cfg.dataset.signal_length,
+        #     num_classes=cfg.dataset.num_classes,
+        #     lr=cfg.train.lr,
+        #     max_epochs=cfg.train.max_epochs
+        # )
+    elif cfg.task == 'eegs_cwt':
+        model = HMSCWTClassifierWithProbabilities(
             num_classes=cfg.dataset.num_classes,
             lr=cfg.train.lr,
             max_epochs=cfg.train.max_epochs
@@ -73,7 +85,8 @@ def main(cfg):
         highcut=cfg.dataset.highcut,
         batch_size=cfg.train.batch_size,
         transform=transformations,
-        dataset_type=cfg.dataset.dataset_type
+        dataset_type=cfg.dataset.dataset_type,
+        augmentation=cfg.dataset.augmentation
     )
 
     # training

@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from src.data.datamodule import HMSSignalClassificationDataModule
-from src.models.classification import HMSEEGClassifierModule, HMSEEGClassifierWithProbabilities, HMSSpectrClassifierModule, HMSCWTClassifierWithProbabilities
+from src.models.classification import HMSEEGClassifierModule, HMSEEGSpectrClassifierModuleWithProbabilities, HMSSpectrClassifierModule
 from src.models.classification import HMSEEGSpectrClassifierModule
 from src.utils import *
 
@@ -42,12 +42,12 @@ def main(cfg):
         #     lr=cfg.train.lr,
         #     max_epochs=cfg.train.max_epochs
         # )
-    elif cfg.task == 'eegs_cwt':
-        model = HMSCWTClassifierWithProbabilities(
-            num_classes=cfg.dataset.num_classes,
-            lr=cfg.train.lr,
-            max_epochs=cfg.train.max_epochs
-        )
+    # elif cfg.task == 'eegs_cwt':
+    #     model = HMSCWTClassifierWithProbabilities(
+    #         num_classes=cfg.dataset.num_classes,
+    #         lr=cfg.train.lr,
+    #         max_epochs=cfg.train.max_epochs
+    #     )
 
     elif cfg.task == 'spectr':
         print("Spectrogram only")
@@ -66,7 +66,7 @@ def main(cfg):
             print("***** EEG and Spectrogram - unfreezed backbone *****")
         print(f"feat_comb_mode: {cfg.train.feat_comb_mode}")
 
-        model = HMSEEGSpectrClassifierModule(
+        model = HMSEEGSpectrClassifierModuleWithProbabilities(
             eegs_model_path=f"{cfg.train.save_path}eegs_{cfg.train.eegs_run_name}.ckpt",
             spectr_model_path=f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt",
             freeze = cfg.train.freeze,

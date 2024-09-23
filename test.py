@@ -115,7 +115,7 @@ def main(cfg):
     elif cfg.task == 'spectr':
         ckpt_name = f"{cfg.train.save_path}spectr_{cfg.train.spectr_run_name}.ckpt"
         model = HMSSpectrClassifierModule.load_from_checkpoint(ckpt_name)
-    elif cfg.task == 'eeg-spectr':
+    elif cfg.task == 'eegsspectr':
         ckpt_name = f"{cfg.train.save_path}eegsspectr_{cfg.train.eegsspectr_run_name}.ckpt"
         model = HMSEEGSpectrClassifierModule.load_from_checkpoint(ckpt_name)
 

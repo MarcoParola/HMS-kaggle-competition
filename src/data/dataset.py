@@ -104,7 +104,7 @@ class HMSSignalClassificationDataset(Dataset):
             else:
                 eeg = self.eeg_transform(eeg_tensor)
             # eeg = self.eeg_transform(eeg_tensor)        # scommenta per aug solo su spectr
-            print(f"EEG shape: {eeg.shape}")
+            # print(f"EEG shape: {eeg.shape}")
 
             # Applicazione della FFT
             # eeg = torch.abs(torch.fft.rfft(eeg, dim=0))
@@ -139,7 +139,7 @@ class HMSSignalClassificationDataset(Dataset):
                 image = self.spectr_transform(image)
 
             return image, (label, votes_prob)
-            # return image, votes_prob
+        
     
         elif self.task == 'eegsspectr' and self.freeze==False:
 
@@ -162,8 +162,7 @@ class HMSSignalClassificationDataset(Dataset):
             else:
                 image = self.spectr_transform(image)
 
-            return (eeg, image), label
-            # return (eeg, image), votes_prob
+            return (eeg, image), (label, votes_prob)
 
 
 class FeatureDataset(Dataset):
@@ -211,7 +210,19 @@ class FeatureDataset(Dataset):
         eeg = self.eeg_features[index]
         spec = self.spec_features[index]
         label = self.labels[index]
+
         return (eeg, spec), label
+
+        # seizure_vote = self.seizure_vote[index]
+        # lpd_vote = self.lpd_vote[index]
+        # gpd_vote = self.gpd_vote[index]
+        # lrda_vote = self.lrda_vote[index]
+        # grda_vote = self.grda_vote[index]
+        # other_vote = self.other_vote[index]
+        # votes = torch.tensor([seizure_vote, lpd_vote, gpd_vote, lrda_vote, grda_vote, other_vote], dtype=torch.float32).to('cuda')
+        # votes_prob = F.softmax(votes, dim=0)
+
+        # return (eeg, spec), (label, votes_prob)
 
     def __len__(self):
         return len(self.labels)
